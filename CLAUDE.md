@@ -40,18 +40,30 @@ When you do stop, ask one tight, batched question and keep moving on everything 
 
 ## Project Overview
 
-- **Name:** video-player (mobile app)
-- **What it does:** _TBD — establish during the first `brainstorming` pass before building._
-- **Tech stack:** _Not yet chosen. Decide the stack with the user before scaffolding; record it here once set._
-- **Status:** Greenfield. No code, no git yet. Run `git init` before the first autonomous build.
+- **Name:** video-player — open-source Android video player. Full V1 spec: `MASTER_PROMPT.md` (source of truth).
+- **What it does:** Ad-free, account-free, UX-first Android player. "Open and play, never think." VLC's power without the clutter; MX Player's gestures without the ads.
+- **Tech stack:** Native Android — Kotlin + Jetpack Compose. Hybrid playback: Media3/ExoPlayer (default) + libmpv (power/fallback, Phase 2) behind one `PlaybackEngine` interface. GPLv3, F-Droid first. iOS later via KMP (core kept UI-agnostic).
+- **Status:** **Phase 0 complete** (tag `phase-0`): buildable app, MediaStore library browser, Media3 playback behind the engine seam, pure-Kotlin core under test. Next: **Phase 1** (lean MVP → first F-Droid release). Roadmap & per-task plan: `docs/superpowers/plans/2026-06-17-phase0-phase1-foundation-mvp.md`.
 
 ## Project Structure
 
-_Fill in once scaffolded. Keep it current — one component per file, group by feature._
+Multi-module Gradle (Kotlin DSL + version catalog `gradle/libs.versions.toml`):
+- `:core:model` — pure Kotlin (no Android): `MediaItem`, `MediaFolder`, `MediaRepository`, `groupIntoFolders`, `formatDuration`. JVM-unit-tested.
+- `:core:playback` — pure Kotlin: `PlaybackEngine` interface, `PlaybackState`/`PlayerStatus`/`EngineType`, `FakePlaybackEngine`. JVM-unit-tested.
+- `:app` — Android/Compose: `Media3PlaybackEngine` (impl of the interface), `MediaStoreRepository`, `theme/` (Material You + true-black AMOLED), `library/` (screen + ViewModel), `player/` (PlayerScreen), `VideoPlayerApp` nav, `MainActivity`.
+- **Rule:** `:core:*` must stay free of `android.*` / `androidx.compose.*` / `media3` imports. Android/Media3 lives only in `:app`.
 
 ## Key Commands
 
-_Fill in after scaffolding (install / dev / build / test / lint). Until then, detect from the toolchain._
+Builds require JDK 21 (system JDK is 24, which breaks AGP). Prefix every Gradle call:
+```bash
+export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
+./gradlew test                  # all JVM unit tests (core + app)
+./gradlew :core:model:test      # one module's tests
+./gradlew :app:assembleDebug    # build debug APK -> app/build/outputs/apk/debug/
+./gradlew :app:installDebug     # install on running emulator/device
+```
+Emulator smoke: AVD `kuran_test` (`~/Library/Android/sdk/emulator/emulator -avd kuran_test`); `adb` for install/launch/screencap.
 
 ---
 
