@@ -18,7 +18,10 @@ interface PlaybackEngine {
     fun play()
     fun pause()
 
-    /** Seek to [positionMs]; implementations clamp into `0..durationMs`. */
+    /**
+     * Seek to [positionMs]. Negative values clamp to 0; values past the media
+     * duration are clamped by the engine (the exact upper bound is engine-defined).
+     */
     fun seekTo(positionMs: Long)
 
     /** Set playback [speed] (1f = normal). */

@@ -55,6 +55,7 @@ class MediaStoreRepository(private val context: Context) : MediaRepository {
             val idCol = c.getColumnIndexOrThrow(MediaStore.Video.Media._ID)
             val nameCol = c.getColumnIndexOrThrow(MediaStore.Video.Media.DISPLAY_NAME)
             val dataCol = c.getColumnIndexOrThrow(MediaStore.Video.Media.DATA)
+            val bucketCol = c.getColumnIndex(MediaStore.Video.Media.BUCKET_DISPLAY_NAME)
             val durationCol = c.getColumnIndexOrThrow(MediaStore.Video.Media.DURATION)
             val sizeCol = c.getColumnIndexOrThrow(MediaStore.Video.Media.SIZE)
             val dateCol = c.getColumnIndexOrThrow(MediaStore.Video.Media.DATE_ADDED)
@@ -64,7 +65,12 @@ class MediaStoreRepository(private val context: Context) : MediaRepository {
                     val id = c.getLong(idCol)
                     val displayName = c.getString(nameCol) ?: ""
                     val data = c.getString(dataCol) ?: ""
-                    val folderPath = File(data).parent ?: ""
+                    // DATA is deprecated and may be empty under scoped storage (API 29+).
+                    // Prefer its parent dir when present; otherwise fall back to the
+                    // bucket display name so videos still group under a meaningful folder.
+                    val parentFromData = data.takeIf { it.isNotEmpty() }?.let { File(it).parent }
+                    val bucketName = if (bucketCol >= 0) c.getString(bucketCol) else null
+                    val folderPath = parentFromData ?: bucketName ?: ""
                     val durationMs = c.getLong(durationCol)
                     val sizeBytes = c.getLong(sizeCol)
                     val dateAddedSec = c.getLong(dateCol)
