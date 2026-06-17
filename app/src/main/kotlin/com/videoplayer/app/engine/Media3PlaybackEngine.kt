@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.PlayerView
 import com.videoplayer.core.playback.EngineType
 import com.videoplayer.core.playback.PlaybackEngine
 import com.videoplayer.core.playback.PlaybackState
@@ -50,6 +51,15 @@ class Media3PlaybackEngine(context: Context) : PlaybackEngine {
                 _state.value = _state.value.copy(isPlaying = isPlaying)
             }
         })
+    }
+
+    /**
+     * Binds this engine's player to a Media3 [PlayerView] so video renders.
+     * Engine-specific surface attachment lives here, in the app layer — the
+     * core [PlaybackEngine] abstraction stays free of any UI/Media3 types.
+     */
+    fun attachToView(view: PlayerView) {
+        view.player = player
     }
 
     override fun setMediaUri(uri: String) {
