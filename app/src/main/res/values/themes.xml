@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      Compose owns all theming at runtime (see theme/Theme.kt). This XML theme
+      exists only so the Activity has a no-action-bar shell with a black window
+      background, avoiding a white flash before Compose draws.
+    -->
+    <style name="Theme.VideoPlayer" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@android:color/black</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
+</resources>
