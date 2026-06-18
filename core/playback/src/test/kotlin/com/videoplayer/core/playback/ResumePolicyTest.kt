@@ -22,4 +22,11 @@ class ResumePolicyTest {
     @Test fun `negative saved position resets to zero`() {
         assertThat(effectiveResumePosition(-1, 120_000)).isEqualTo(0)
     }
+    @Test fun `exactly at end-guard boundary resets to zero`() {
+        assertThat(effectiveResumePosition(115_000, 120_000)).isEqualTo(0)
+    }
+
+    @Test fun `negative duration honors a valid saved position`() {
+        assertThat(effectiveResumePosition(30_000, -1)).isEqualTo(30_000)
+    }
 }
