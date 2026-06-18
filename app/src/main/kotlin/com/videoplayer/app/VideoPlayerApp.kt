@@ -49,9 +49,8 @@ fun VideoPlayerApp() {
 
     if (current != null) {
         PlayerScreen(
-            item = current,
             playlist = playlist,
-            onAdvance = { next -> selected = next },
+            startUri = current.uri,
             onBack = { selected = null },
         )
     } else {

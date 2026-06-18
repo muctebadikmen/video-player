@@ -26,6 +26,7 @@ class PlayerViewModel(private val repo: PlaybackMemoryRepository) : ViewModel() 
     val resolved: StateFlow<ResolvedStartSettings?> = _resolved.asStateFlow()
 
     fun load(mediaUri: String) {
+        _resolved.value = null
         viewModelScope.launch { _resolved.value = repo.resolveStart(mediaUri) }
     }
 

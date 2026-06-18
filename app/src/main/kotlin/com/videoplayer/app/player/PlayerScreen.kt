@@ -72,7 +72,6 @@ import com.videoplayer.app.player.gestures.nextAspectMode
 import com.videoplayer.app.player.gestures.verticalSide
 import com.videoplayer.core.model.MediaItem
 import com.videoplayer.core.model.formatDuration
-import com.videoplayer.core.model.nextInFolder
 import com.videoplayer.core.playback.AbLoop
 import com.videoplayer.core.playback.FRAME_STEP_MS
 import com.videoplayer.core.playback.LOCK_HINT_VISIBLE_MS
@@ -85,6 +84,7 @@ import com.videoplayer.core.playback.clampSpeed
 import com.videoplayer.core.playback.isSleepExpired
 import com.videoplayer.core.playback.nextOrientationMode
 import com.videoplayer.core.playback.pipAvailable
+import com.videoplayer.core.playback.startIndexFor
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -94,28 +94,32 @@ import kotlin.math.roundToInt
 private const val AUTO_HIDE_MS = 3_000L
 private const val GESTURE_OVERLAY_MS = 800L
 
-// TODO: make a setting in P1.H
-private const val AUTO_ADVANCE_DEFAULT = true
-
 /**
- * Full-screen playback for a single [MediaItem]. Owns a [Media3PlaybackEngine],
- * renders a custom Compose control overlay, and handles gestures: tap toggles
+ * Full-screen playback for a folder [playlist]. Owns a single per-session
+ * [Media3PlaybackEngine] holding the whole folder as a native ExoPlayer playlist
+ * (so next/previous and auto-advance are native and survive backgrounding). The
+ * displayed item is derived from the engine's current media index; per-file
+ * effects (resume/speed/aspect/orientation) re-key on the current item's uri.
+ * Renders a custom Compose control overlay and handles gestures: tap toggles
  * controls; double-tap seeks ±10s (sides) or play/pauses (center); left-half
  * vertical drag changes brightness, right-half changes volume (to 200%). Each
  * gesture shows a transient [GestureOverlay].
  */
 @Composable
 fun PlayerScreen(
-    item: MediaItem,
     playlist: List<MediaItem>,
-    onAdvance: (MediaItem) -> Unit,
+    startUri: String,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     val activity = remember(context) { context.findActivity() }
-    val engine = remember(item.uri) { Media3PlaybackEngine(context) }
+    val engine = remember { Media3PlaybackEngine(context) }
     val state by engine.state.collectAsStateWithLifecycle()
+    val startIndex = remember(playlist, startUri) { startIndexFor(playlist.map { it.uri }, startUri) }
+    val currentItem = playlist.getOrElse(state.currentMediaIndex) {
+        playlist.getOrElse(startIndex) { playlist.firstOrNull() }
+    } ?: return  // empty playlist guard
     // The audio session id is 0 until the service MediaController connects, then becomes the
     // real id. Rebuild the VolumeController when it arrives so the LoudnessEnhancer binds to
     // the live session; the old instance is released by the DisposableEffect below.
@@ -133,7 +137,7 @@ fun PlayerScreen(
 
     val playerViewModel: PlayerViewModel = viewModel(factory = PlayerViewModel.factory(context))
     val resolved by playerViewModel.resolved.collectAsStateWithLifecycle()
-    var resumeApplied by remember(item.uri) { mutableStateOf(false) }
+    var resumeApplied by remember(currentItem.uri) { mutableStateOf(false) }
     val lifecycleOwner = LocalLifecycleOwner.current
 
     var controlsVisible by remember { mutableStateOf(true) }
@@ -147,8 +151,8 @@ fun PlayerScreen(
     var aspectMode by remember { mutableStateOf(AspectMode.FIT) }
 
     // P1.E-2: Kids Lock + per-file orientation override.
-    var locked by remember(item.uri) { mutableStateOf(false) }
-    var orientationMode by remember(item.uri) { mutableStateOf(OrientationMode.AUTO) }
+    var locked by remember(currentItem.uri) { mutableStateOf(false) }
+    var orientationMode by remember(currentItem.uri) { mutableStateOf(OrientationMode.AUTO) }
     val keyGuard = remember(activity) { activity as? HardwareKeyGuard }
 
     // P1.F-2: Picture-in-Picture. The Activity implements PipController; PiP entry is API 26+.
@@ -167,7 +171,7 @@ fun PlayerScreen(
     LaunchedEffect(inPip) { if (inPip) controlsVisible = false }
 
     // A-B repeat state (resets when the media item changes)
-    var abLoop by remember(item.uri) { mutableStateOf(AbLoop()) }
+    var abLoop by remember(currentItem.uri) { mutableStateOf(AbLoop()) }
 
     // Sleep timer state
     var sleepDeadlineMs by remember { mutableStateOf<Long?>(null) }
@@ -190,12 +194,12 @@ fun PlayerScreen(
         }
     }
 
-    // Apply the per-file orientation. Keyed on item.uri (NOT just resolved): on auto-advance
-    // PlayerScreen is reused, and `resolved` is a StateFlow that dedupes equal values, so two
-    // files with identical resolved settings would skip this and leak the previous file's forced
-    // orientation. Re-keying on item.uri guarantees a re-evaluation per file; a file with no saved
-    // override applies UNSPECIFIED, releasing any prior lock (including a manual one).
-    LaunchedEffect(item.uri, resolved) {
+    // Apply the per-file orientation. Keyed on currentItem.uri (NOT just resolved): on a native
+    // playlist transition currentItem.uri changes, and `resolved` is a StateFlow that dedupes equal
+    // values, so two files with identical resolved settings would skip this and leak the previous
+    // file's forced orientation. Re-keying on currentItem.uri guarantees a re-evaluation per file; a
+    // file with no saved override applies UNSPECIFIED, releasing any prior lock (including a manual one).
+    LaunchedEffect(currentItem.uri, resolved) {
         val r = resolved
         orientationMode = if (r != null) orientationModeFromActivityInfo(r.orientation) else OrientationMode.AUTO
         activity?.requestedOrientation = r?.orientation ?: ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
@@ -208,11 +212,11 @@ fun PlayerScreen(
     LaunchedEffect(locked) { keyGuard?.setHardwareKeysBlocked(locked) }
     DisposableEffect(keyGuard) { onDispose { keyGuard?.setHardwareKeysBlocked(false) } }
 
-    LaunchedEffect(item.uri) {
-        playerViewModel.load(item.uri)
+    LaunchedEffect(currentItem.uri) {
+        playerViewModel.load(currentItem.uri)
     }
     LaunchedEffect(engine) {
-        engine.setMediaUri(item.uri)
+        engine.setMediaPlaylist(playlist.map { it.uri }, startIndex)
     }
     // Apply resolved settings once the engine is READY and start playing. We wait for READY
     // (not BUFFERING) because the resume seek only lands reliably after the timeline is
@@ -265,17 +269,11 @@ fun PlayerScreen(
         sleepDeadlineMs = null
     }
 
-    // Auto-advance: when the video ends, either honour the sleep-at-end-of-video flag
-    // (pause and clear it) or advance to the next file in the folder playlist.
-    LaunchedEffect(state.status) {
-        if (state.status == PlayerStatus.ENDED) {
-            if (sleepAtEndOfVideo) {
-                engine.pause()
-                sleepAtEndOfVideo = false
-            } else if (AUTO_ADVANCE_DEFAULT) {
-                nextInFolder(playlist, item.uri)?.let(onAdvance)
-            }
-        }
+    // Auto-advance is native (the ExoPlayer playlist advances itself, even in the background).
+    // Sleep "at end of video" maps to ExoPlayer's pause-at-end-of-media-items: when armed, the
+    // current clip plays to its end and pauses instead of advancing.
+    LaunchedEffect(sleepAtEndOfVideo) {
+        engine.setPauseAtEndOfMediaItems(sleepAtEndOfVideo)
     }
 
     val latestPositionMs by rememberUpdatedState(state.positionMs)
@@ -283,6 +281,7 @@ fun PlayerScreen(
     val latestSpeed by rememberUpdatedState(state.speed)
     val latestAspect by rememberUpdatedState(aspectMode)
     val latestBoost by rememberUpdatedState(speedBoostActive)
+    val latestCurrentUri by rememberUpdatedState(currentItem.uri)
 
     // Save current state: periodically while playing, and on STOP / dispose.
     // Reads the last *composed* values rather than engine.state.value, because
@@ -294,7 +293,7 @@ fun PlayerScreen(
         if (latestDurationMs <= 0L) return
         val speedToSave = if (latestBoost) 1f else latestSpeed
         playerViewModel.persist(
-            mediaUri = item.uri,
+            mediaUri = latestCurrentUri,
             positionMs = latestPositionMs,
             durationMs = latestDurationMs,
             speed = speedToSave,
@@ -520,7 +519,7 @@ fun PlayerScreen(
                     orientationMode = nextOrientationMode(orientationMode)
                     val ai = orientationMode.toActivityInfo()
                     activity?.requestedOrientation = ai
-                    playerViewModel.persistOrientation(item.uri, ai)
+                    playerViewModel.persistOrientation(currentItem.uri, ai)
                     interactionTick++
                 },
                 pipSupported = pipSupported,
