@@ -1,0 +1,57 @@
+package com.videoplayer.app.data.memory
+
+import com.videoplayer.core.playback.effectiveResumePosition
+import com.videoplayer.core.playback.resolvePreference
+import kotlinx.coroutines.flow.first
+
+/**
+ * Resolves what settings to apply when a file opens, and persists state when it closes.
+ *
+ * Precedence (per-file → folder → global) via [resolvePreference]. The folder tier is
+ * `null` in V1 (no folder-default setter yet); it is fully unit-tested in C1 and wired
+ * here for when P1.D/P1.E add folder defaults. Resume position runs through the pure
+ * [effectiveResumePosition] policy and is gated by the global resume-enabled setting.
+ */
+class PlaybackMemoryRepository(
+    private val dao: PlaybackMemoryDao,
+    private val settings: SettingsRepository,
+) {
+    suspend fun resolveStart(mediaUri: String): ResolvedStartSettings {
+        val saved = dao.getByUri(mediaUri)
+        val resumeEnabled = settings.resumeEnabled.first()
+        val globalSpeed = settings.defaultSpeed.first()
+
+        val speed = resolvePreference(file = saved?.speed, folder = null, global = globalSpeed)
+        val aspectMode = resolvePreference(file = saved?.aspectMode, folder = null, global = "FIT")
+        val startPositionMs = if (resumeEnabled && saved != null) {
+            effectiveResumePosition(saved.positionMs, saved.durationMs)
+        } else {
+            0L
+        }
+        return ResolvedStartSettings(startPositionMs, speed, aspectMode)
+    }
+
+    suspend fun persist(
+        mediaUri: String,
+        positionMs: Long,
+        durationMs: Long,
+        speed: Float,
+        aspectMode: String,
+        nowEpochMs: Long,
+    ) {
+        val existing = dao.getByUri(mediaUri)
+        val base = existing ?: PlaybackMemoryEntity(
+            mediaUri = mediaUri, positionMs = 0, durationMs = 0,
+            aspectMode = "FIT", speed = 1f, updatedAtEpochMs = 0L,
+        )
+        dao.upsert(
+            base.copy(
+                positionMs = positionMs,
+                durationMs = durationMs,
+                speed = speed,
+                aspectMode = aspectMode,
+                updatedAtEpochMs = nowEpochMs,
+            ),
+        )
+    }
+}
