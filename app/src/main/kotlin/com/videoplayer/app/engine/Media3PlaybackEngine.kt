@@ -2,16 +2,21 @@ package com.videoplayer.app.engine
 
 import android.content.ComponentName
 import android.content.Context
+import android.os.Bundle
 import androidx.core.content.ContextCompat
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.common.VideoSize
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaController
+import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionToken
 import androidx.media3.ui.PlayerView
 import com.google.common.util.concurrent.ListenableFuture
+import com.videoplayer.app.playback.ARG_PAUSE_AT_END_ENABLED
+import com.videoplayer.app.playback.CMD_SET_PAUSE_AT_END
 import com.videoplayer.app.playback.EXTRA_AUDIO_SESSION_ID
 import com.videoplayer.app.playback.PlaybackService
 import com.videoplayer.core.playback.EngineType
@@ -102,6 +107,16 @@ class Media3PlaybackEngine(context: Context) : PlaybackEngine {
             if (isPlaying) startPositionUpdates() else stopPositionUpdates()
         }
 
+        override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+            val c = controller ?: return
+            _state.update {
+                it.copy(
+                    currentMediaIndex = c.currentMediaItemIndex,
+                    durationMs = c.duration.coerceAtLeast(0),
+                )
+            }
+        }
+
         override fun onVideoSizeChanged(videoSize: VideoSize) {
             val ratio = videoAspectRatio(
                 videoSize.width,
@@ -146,6 +161,7 @@ class Media3PlaybackEngine(context: Context) : PlaybackEngine {
                 durationMs = c.duration.coerceAtLeast(0),
                 speed = c.playbackParameters.speed,
                 audioSessionId = sessionId,
+                currentMediaIndex = c.currentMediaItemIndex,
             )
         }
     }
@@ -188,6 +204,19 @@ class Media3PlaybackEngine(context: Context) : PlaybackEngine {
     override fun setMediaUri(uri: String) = withController { c ->
         c.setMediaItem(MediaItem.fromUri(uri))
         c.prepare()
+    }
+
+    override fun setMediaPlaylist(uris: List<String>, startIndex: Int) = withController { c ->
+        val items = uris.map { MediaItem.fromUri(it) }
+        val idx = if (items.isEmpty()) 0 else startIndex.coerceIn(0, items.lastIndex)
+        c.setMediaItems(items, idx, C.TIME_UNSET)
+        c.prepare()
+    }
+
+    override fun setPauseAtEndOfMediaItems(enabled: Boolean) = withController { c ->
+        val args = Bundle().apply { putBoolean(ARG_PAUSE_AT_END_ENABLED, enabled) }
+        c.sendCustomCommand(SessionCommand(CMD_SET_PAUSE_AT_END, Bundle.EMPTY), args)
+        Unit
     }
 
     override fun play() = withController { it.play() }
