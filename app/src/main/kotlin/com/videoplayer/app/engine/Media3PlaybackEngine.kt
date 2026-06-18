@@ -53,6 +53,9 @@ class Media3PlaybackEngine(context: Context) : PlaybackEngine {
     private val scope = CoroutineScope(Dispatchers.Main.immediate + SupervisorJob())
     private var positionJob: Job? = null
 
+    /** ExoPlayer's audio session id, used to attach a LoudnessEnhancer for >100% volume. */
+    val audioSessionId: Int get() = player.audioSessionId
+
     private val _state = MutableStateFlow(PlaybackState(engine = EngineType.MEDIA3))
     override val state: StateFlow<PlaybackState> = _state.asStateFlow()
 

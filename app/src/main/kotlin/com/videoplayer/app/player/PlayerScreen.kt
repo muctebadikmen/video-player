@@ -1,14 +1,20 @@
 package com.videoplayer.app.player
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -24,17 +30,23 @@ import com.videoplayer.app.player.controls.SKIP_MS
 import com.videoplayer.app.player.controls.doubleTapAction
 import com.videoplayer.app.player.controls.resolveTapZone
 import com.videoplayer.app.player.controls.seekTarget
+import com.videoplayer.app.player.gestures.VerticalSide
+import com.videoplayer.app.player.gestures.applyBrightness
+import com.videoplayer.app.player.gestures.applyVolumeFactor
+import com.videoplayer.app.player.gestures.verticalSide
 import com.videoplayer.core.model.MediaItem
 import kotlinx.coroutines.delay
+import kotlin.math.roundToInt
 
 private const val AUTO_HIDE_MS = 3_000L
+private const val GESTURE_OVERLAY_MS = 800L
 
 /**
  * Full-screen playback for a single [MediaItem]. Owns a [Media3PlaybackEngine],
- * renders a custom Compose control overlay on top of the video surface, and
- * handles tap gestures: single-tap toggles the controls, double-tap seeks ±10s
- * on the sides or play/pauses in the center. Controls auto-hide after 3s while
- * playing. Tears down cleanly (clears the view's player, then releases).
+ * renders a custom Compose control overlay, and handles gestures: tap toggles
+ * controls; double-tap seeks ±10s (sides) or play/pauses (center); left-half
+ * vertical drag changes brightness, right-half changes volume (to 200%). Each
+ * gesture shows a transient [GestureOverlay].
  */
 @Composable
 fun PlayerScreen(
@@ -43,11 +55,18 @@ fun PlayerScreen(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
+    val activity = remember(context) { context.findActivity() }
     val engine = remember(item.uri) { Media3PlaybackEngine(context) }
+    val volumeController = remember(engine) { VolumeController(context, engine.audioSessionId) }
     val state by engine.state.collectAsStateWithLifecycle()
 
     var controlsVisible by remember { mutableStateOf(true) }
     var interactionTick by remember { mutableIntStateOf(0) }
+
+    var brightness by remember { mutableFloatStateOf(0.5f) }
+    var volumeFactor by remember { mutableFloatStateOf(volumeController.currentFactor()) }
+    var gestureLabel by remember { mutableStateOf<String?>(null) }
+    var gestureSeq by remember { mutableIntStateOf(0) }
 
     BackHandler(onBack = onBack)
 
@@ -56,11 +75,23 @@ fun PlayerScreen(
         engine.play()
     }
 
-    // Auto-hide controls after a period of no interaction, but only while playing.
+    DisposableEffect(volumeController) {
+        onDispose { volumeController.release() }
+    }
+
+    // Auto-hide controls after inactivity, only while playing.
     LaunchedEffect(controlsVisible, interactionTick, state.isPlaying) {
         if (controlsVisible && state.isPlaying) {
             delay(AUTO_HIDE_MS)
             controlsVisible = false
+        }
+    }
+
+    // Auto-hide the transient gesture overlay shortly after the last gesture event.
+    LaunchedEffect(gestureSeq) {
+        if (gestureLabel != null) {
+            delay(GESTURE_OVERLAY_MS)
+            gestureLabel = null
         }
     }
 
@@ -86,6 +117,29 @@ fun PlayerScreen(
                         }
                         controlsVisible = true
                         interactionTick++
+                    },
+                )
+            }
+            .pointerInput(Unit) {
+                var side = VerticalSide.BRIGHTNESS
+                detectVerticalDragGestures(
+                    onDragStart = { offset -> side = verticalSide(offset.x, size.width.toFloat()) },
+                    onVerticalDrag = { change, dragAmount ->
+                        change.consume()
+                        val h = size.height.toFloat()
+                        when (side) {
+                            VerticalSide.BRIGHTNESS -> {
+                                brightness = applyBrightness(brightness, dragAmount, h)
+                                activity?.let { setWindowBrightness(it, brightness) }
+                                gestureLabel = "Brightness ${(brightness * 100).roundToInt()}%"
+                            }
+                            VerticalSide.VOLUME -> {
+                                volumeFactor = applyVolumeFactor(volumeFactor, dragAmount, h)
+                                volumeController.setFactor(volumeFactor)
+                                gestureLabel = "Volume ${(volumeFactor * 100).roundToInt()}%"
+                            }
+                        }
+                        gestureSeq++
                     },
                 )
             },
@@ -119,5 +173,24 @@ fun PlayerScreen(
                 onBack = onBack,
             )
         }
+
+        gestureLabel?.let { GestureOverlay(label = it) }
+    }
+}
+
+/** Unwraps an [Activity] from a (possibly wrapped) Compose [Context]. */
+private fun Context.findActivity(): Activity? {
+    var ctx = this
+    while (ctx is ContextWrapper) {
+        if (ctx is Activity) return ctx
+        ctx = ctx.baseContext
+    }
+    return null
+}
+
+/** Applies a 0..1 [value] as the window's screen brightness override. */
+private fun setWindowBrightness(activity: Activity, value: Float) {
+    activity.window.attributes = activity.window.attributes.apply {
+        screenBrightness = value.coerceIn(0f, 1f)
     }
 }
