@@ -10,6 +10,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.videoplayer.app.data.MediaStoreRepository
 import com.videoplayer.app.data.memory.AppDatabase
@@ -36,11 +37,23 @@ fun VideoPlayerApp() {
         )
     }
 
+    val uiState by libraryViewModel.uiState.collectAsStateWithLifecycle()
     var selected by remember { mutableStateOf<MediaItem?>(null) }
     val current = selected
+    val playlist = remember(current, uiState.folders, uiState.videos) {
+        val c = current ?: return@remember emptyList()
+        uiState.folders.firstOrNull { f -> f.items.any { it.uri == c.uri } }?.items
+            ?: uiState.videos.takeIf { vs -> vs.any { it.uri == c.uri } }
+            ?: listOf(c)
+    }
 
     if (current != null) {
-        PlayerScreen(item = current, onBack = { selected = null })
+        PlayerScreen(
+            item = current,
+            playlist = playlist,
+            onAdvance = { next -> selected = next },
+            onBack = { selected = null },
+        )
     } else {
         Scaffold { innerPadding ->
             LibraryScreen(

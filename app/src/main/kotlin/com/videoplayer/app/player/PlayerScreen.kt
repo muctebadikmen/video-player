@@ -51,6 +51,7 @@ import com.videoplayer.app.player.gestures.nextAspectMode
 import com.videoplayer.app.player.gestures.verticalSide
 import com.videoplayer.core.model.MediaItem
 import com.videoplayer.core.model.formatDuration
+import com.videoplayer.core.model.nextInFolder
 import com.videoplayer.core.playback.AbLoop
 import com.videoplayer.core.playback.FRAME_STEP_MS
 import com.videoplayer.core.playback.PlayerStatus
@@ -63,6 +64,9 @@ import kotlin.math.roundToInt
 private const val AUTO_HIDE_MS = 3_000L
 private const val GESTURE_OVERLAY_MS = 800L
 
+// TODO: make a setting in P1.H
+private const val AUTO_ADVANCE_DEFAULT = true
+
 /**
  * Full-screen playback for a single [MediaItem]. Owns a [Media3PlaybackEngine],
  * renders a custom Compose control overlay, and handles gestures: tap toggles
@@ -73,6 +77,8 @@ private const val GESTURE_OVERLAY_MS = 800L
 @Composable
 fun PlayerScreen(
     item: MediaItem,
+    playlist: List<MediaItem>,
+    onAdvance: (MediaItem) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -162,6 +168,19 @@ fun PlayerScreen(
         }
         engine.pause()
         sleepDeadlineMs = null
+    }
+
+    // Auto-advance: when the video ends, either honour the sleep-at-end-of-video flag
+    // (pause and clear it) or advance to the next file in the folder playlist.
+    LaunchedEffect(state.status) {
+        if (state.status == PlayerStatus.ENDED) {
+            if (sleepAtEndOfVideo) {
+                engine.pause()
+                sleepAtEndOfVideo = false
+            } else if (AUTO_ADVANCE_DEFAULT) {
+                nextInFolder(playlist, item.uri)?.let(onAdvance)
+            }
+        }
     }
 
     val latestPositionMs by rememberUpdatedState(state.positionMs)
