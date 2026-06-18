@@ -29,4 +29,10 @@ interface PlaybackEngine {
 
     /** Release all engine resources. The instance must not be used afterward. */
     fun release()
+
+    /** Replace the queue with [uris] and start at [startIndex]. */
+    fun setMediaPlaylist(uris: List<String>, startIndex: Int)
+
+    /** When true, pause at the end of each media item instead of advancing. */
+    fun setPauseAtEndOfMediaItems(enabled: Boolean)
 }

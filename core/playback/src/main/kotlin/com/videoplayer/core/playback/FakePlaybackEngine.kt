@@ -31,4 +31,16 @@ class FakePlaybackEngine(private val fakeDurationMs: Long = 0) : PlaybackEngine 
     override fun setSpeed(speed: Float) = _state.update { it.copy(speed = speed) }
 
     override fun release() = _state.update { PlaybackState() }
+
+    var pauseAtEndOfMediaItems: Boolean = false
+        private set
+
+    override fun setMediaPlaylist(uris: List<String>, startIndex: Int) = _state.update {
+        val idx = if (uris.isEmpty()) 0 else startIndex.coerceIn(0, uris.lastIndex)
+        it.copy(status = PlayerStatus.READY, durationMs = fakeDurationMs, positionMs = 0, currentMediaIndex = idx)
+    }
+
+    override fun setPauseAtEndOfMediaItems(enabled: Boolean) {
+        pauseAtEndOfMediaItems = enabled
+    }
 }

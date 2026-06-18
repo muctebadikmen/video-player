@@ -18,4 +18,5 @@ data class PlaybackState(
     val videoAspectRatio: Float = 0f,
     val engine: EngineType = EngineType.MEDIA3,
     val audioSessionId: Int = 0,
+    val currentMediaIndex: Int = 0,
 )
