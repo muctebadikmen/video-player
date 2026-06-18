@@ -5,6 +5,11 @@ import com.videoplayer.core.playback.resolvePreference
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 
+/** Narrow read seam the library depends on, so it can be faked in tests without Room. */
+interface MemorySource {
+    fun observeAll(): Flow<List<PlaybackMemoryEntity>>
+}
+
 /**
  * Resolves what settings to apply when a file opens, and persists state when it closes.
  *
@@ -16,7 +21,7 @@ import kotlinx.coroutines.flow.first
 class PlaybackMemoryRepository(
     private val dao: PlaybackMemoryDao,
     private val settings: SettingsRepository,
-) {
+) : MemorySource {
     suspend fun resolveStart(mediaUri: String): ResolvedStartSettings {
         val saved = dao.getByUri(mediaUri)
         val resumeEnabled = settings.resumeEnabled.first()
@@ -61,5 +66,5 @@ class PlaybackMemoryRepository(
     }
 
     /** Observes every persisted memory row — used by the library for progress + continue-watching. */
-    fun observeAll(): Flow<List<PlaybackMemoryEntity>> = dao.observeAll()
+    override fun observeAll(): Flow<List<PlaybackMemoryEntity>> = dao.observeAll()
 }

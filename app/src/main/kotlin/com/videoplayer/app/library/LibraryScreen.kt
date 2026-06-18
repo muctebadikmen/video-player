@@ -46,7 +46,9 @@ fun LibraryScreen(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    val folders by viewModel.folders.collectAsStateWithLifecycle()
+    // D5 shim: read folders from the new combined uiState (D6 will build the full new UI)
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val folders = uiState.folders
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
