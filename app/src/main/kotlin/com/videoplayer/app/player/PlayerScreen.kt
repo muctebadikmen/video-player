@@ -60,6 +60,7 @@ import com.videoplayer.app.player.gestures.BOOST_SPEED
 import com.videoplayer.app.player.gestures.VerticalSide
 import com.videoplayer.app.player.gestures.applyBrightness
 import com.videoplayer.app.player.gestures.applyVolumeFactor
+import com.videoplayer.app.player.gestures.displayLabel
 import com.videoplayer.app.player.gestures.horizontalSeekDeltaMs
 import com.videoplayer.app.player.gestures.nextAspectMode
 import com.videoplayer.app.player.gestures.verticalSide
@@ -413,10 +414,10 @@ fun PlayerScreen(
         AnimatedVisibility(visible = controlsVisible) {
             PlayerControls(
                 state = state,
-                aspectLabel = aspectMode.name.lowercase().replaceFirstChar { it.uppercase() },
+                aspectLabel = aspectMode.displayLabel(),
                 onCycleAspect = {
                     aspectMode = nextAspectMode(aspectMode)
-                    gestureLabel = aspectMode.name.lowercase().replaceFirstChar { it.uppercase() }
+                    gestureLabel = aspectMode.displayLabel()
                     gestureSeq++
                     interactionTick++
                 },
@@ -485,8 +486,11 @@ fun PlayerScreen(
         if (locked) {
             var hintVisible by remember { mutableStateOf(true) }
             var holdProgress by remember { mutableFloatStateOf(0f) }
-            LaunchedEffect(hintVisible) {
-                if (hintVisible) { delay(LOCK_HINT_VISIBLE_MS); hintVisible = false }
+            // While a hold is in progress, keep the affordance on-screen so the 3s unlock
+            // hold can't be cut short by the hint's auto-hide (both are LOCK/UNLOCK = 3s).
+            var holdActive by remember { mutableStateOf(false) }
+            LaunchedEffect(hintVisible, holdActive) {
+                if (hintVisible && !holdActive) { delay(LOCK_HINT_VISIBLE_MS); hintVisible = false }
             }
             Box(
                 modifier = Modifier
@@ -500,6 +504,7 @@ fun PlayerScreen(
                             .pointerInput(Unit) {
                                 detectTapGestures(
                                     onPress = {
+                                        holdActive = true
                                         holdProgress = 0f
                                         val unlocked = coroutineScope {
                                             val anim = Animatable(0f)
@@ -515,6 +520,7 @@ fun PlayerScreen(
                                             !releasedEarly
                                         }
                                         holdProgress = 0f
+                                        holdActive = false
                                         if (unlocked) locked = false
                                     },
                                 )

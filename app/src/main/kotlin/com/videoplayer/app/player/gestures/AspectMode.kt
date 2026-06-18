@@ -11,3 +11,12 @@ fun nextAspectMode(current: AspectMode): AspectMode = when (current) {
     AspectMode.RATIO_16_9 -> AspectMode.RATIO_4_3
     AspectMode.RATIO_4_3 -> AspectMode.FIT
 }
+
+/** Short human label for the control overlay (e.g. "16:9" instead of the raw enum name). */
+fun AspectMode.displayLabel(): String = when (this) {
+    AspectMode.FIT -> "Fit"
+    AspectMode.FILL -> "Fill"
+    AspectMode.ZOOM -> "Zoom"
+    AspectMode.RATIO_16_9 -> "16:9"
+    AspectMode.RATIO_4_3 -> "4:3"
+}
