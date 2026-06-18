@@ -1,10 +1,16 @@
 package com.videoplayer.app.player
 
+import android.Manifest
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.pm.ActivityInfo
+import android.content.pm.PackageManager
+import android.os.Build
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
@@ -107,8 +113,21 @@ fun PlayerScreen(
     val context = LocalContext.current
     val activity = remember(context) { context.findActivity() }
     val engine = remember(item.uri) { Media3PlaybackEngine(context) }
-    val volumeController = remember(engine) { VolumeController(context, engine.audioSessionId) }
     val state by engine.state.collectAsStateWithLifecycle()
+    // The audio session id is 0 until the service MediaController connects, then becomes the
+    // real id. Rebuild the VolumeController when it arrives so the LoudnessEnhancer binds to
+    // the live session; the old instance is released by the DisposableEffect below.
+    val audioSessionId = state.audioSessionId
+    val volumeController = remember(audioSessionId) { VolumeController(context, audioSessionId) }
+
+    // User-initiated exit: stop the service player, then navigate back. Auto-advance does NOT
+    // use this (it must keep the player alive). Home press keeps playback alive too.
+    val exitToLibrary = remember(engine, onBack) {
+        {
+            engine.stop()
+            onBack()
+        }
+    }
 
     val playerViewModel: PlayerViewModel = viewModel(factory = PlayerViewModel.factory(context))
     val resolved by playerViewModel.resolved.collectAsStateWithLifecycle()
@@ -138,7 +157,21 @@ fun PlayerScreen(
     var sleepAtEndOfVideo by remember { mutableStateOf(false) }
     val sleepActive = sleepDeadlineMs != null || sleepAtEndOfVideo
 
-    BackHandler { if (!locked) onBack() }
+    BackHandler { if (!locked) exitToLibrary() }
+
+    // Request POST_NOTIFICATIONS (API 33+) so the media notification can show. Playback works
+    // even if denied, so the result is ignored.
+    val notifLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { /* ignored: playback works without it */ }
+    LaunchedEffect(Unit) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            notifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
 
     // Apply the per-file orientation. Keyed on item.uri (NOT just resolved): on auto-advance
     // PlayerScreen is reused, and `resolved` is a StateFlow that dedupes equal values, so two
@@ -425,7 +458,7 @@ fun PlayerScreen(
                     engine.seekTo(target)
                     interactionTick++
                 },
-                onBack = onBack,
+                onBack = exitToLibrary,
                 currentSpeed = state.speed,
                 onSetSpeed = { speed ->
                     engine.setSpeed(clampSpeed(speed))
