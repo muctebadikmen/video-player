@@ -27,7 +27,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import com.videoplayer.app.engine.Media3PlaybackEngine
@@ -46,6 +51,7 @@ import com.videoplayer.app.player.gestures.nextAspectMode
 import com.videoplayer.app.player.gestures.verticalSide
 import com.videoplayer.core.model.MediaItem
 import com.videoplayer.core.model.formatDuration
+import com.videoplayer.core.playback.PlayerStatus
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 
@@ -71,6 +77,11 @@ fun PlayerScreen(
     val volumeController = remember(engine) { VolumeController(context, engine.audioSessionId) }
     val state by engine.state.collectAsStateWithLifecycle()
 
+    val playerViewModel: PlayerViewModel = viewModel(factory = PlayerViewModel.factory(context))
+    val resolved by playerViewModel.resolved.collectAsStateWithLifecycle()
+    var resumeApplied by remember(item.uri) { mutableStateOf(false) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+
     var controlsVisible by remember { mutableStateOf(true) }
     var interactionTick by remember { mutableIntStateOf(0) }
 
@@ -83,9 +94,22 @@ fun PlayerScreen(
 
     BackHandler(onBack = onBack)
 
+    LaunchedEffect(item.uri) {
+        playerViewModel.load(item.uri)
+    }
     LaunchedEffect(engine) {
         engine.setMediaUri(item.uri)
-        engine.play()
+    }
+    // Apply resolved settings once the engine is READY (duration known) and start playing.
+    LaunchedEffect(state.status, resolved) {
+        val r = resolved
+        if (!resumeApplied && r != null && state.status == PlayerStatus.READY) {
+            if (r.startPositionMs > 0) engine.seekTo(r.startPositionMs)
+            engine.setSpeed(r.speed)
+            aspectMode = runCatching { AspectMode.valueOf(r.aspectMode) }.getOrDefault(AspectMode.FIT)
+            resumeApplied = true
+            engine.play()
+        }
     }
 
     DisposableEffect(volumeController) {
@@ -105,6 +129,43 @@ fun PlayerScreen(
         if (gestureLabel != null) {
             delay(GESTURE_OVERLAY_MS)
             gestureLabel = null
+        }
+    }
+
+    val latestAspect by rememberUpdatedState(aspectMode)
+    val latestBoost by rememberUpdatedState(speedBoostActive)
+
+    // Save current state: periodically while playing, and on STOP / dispose.
+    fun saveNow() {
+        if (!resumeApplied) return
+        val s = engine.state.value
+        val speedToSave = if (latestBoost) 1f else s.speed
+        playerViewModel.persist(
+            mediaUri = item.uri,
+            positionMs = s.positionMs,
+            durationMs = s.durationMs,
+            speed = speedToSave,
+            aspectMode = latestAspect.name,
+        )
+    }
+
+    LaunchedEffect(state.isPlaying, resumeApplied) {
+        if (state.isPlaying && resumeApplied) {
+            while (true) {
+                delay(5_000L)
+                saveNow()
+            }
+        }
+    }
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) saveNow()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            saveNow()
         }
     }
 
