@@ -112,14 +112,18 @@ fun PlayerScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // Caller (VideoPlayerApp) always passes a non-empty playlist; this guard is the very
+    // first statement so no Compose hooks run before it (keeps hook order stable) and lets
+    // currentItem stay non-null below.
+    if (playlist.isEmpty()) return
     val context = LocalContext.current
     val activity = remember(context) { context.findActivity() }
     val engine = remember { Media3PlaybackEngine(context) }
     val state by engine.state.collectAsStateWithLifecycle()
     val startIndex = remember(playlist, startUri) { startIndexFor(playlist.map { it.uri }, startUri) }
     val currentItem = playlist.getOrElse(state.currentMediaIndex) {
-        playlist.getOrElse(startIndex) { playlist.firstOrNull() }
-    } ?: return  // empty playlist guard
+        playlist.getOrElse(startIndex) { playlist.first() }
+    }
     // The audio session id is 0 until the service MediaController connects, then becomes the
     // real id. Rebuild the VolumeController when it arrives so the LoudnessEnhancer binds to
     // the live session; the old instance is released by the DisposableEffect below.
