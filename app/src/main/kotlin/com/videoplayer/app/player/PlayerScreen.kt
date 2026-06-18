@@ -51,7 +51,12 @@ import com.videoplayer.app.player.gestures.nextAspectMode
 import com.videoplayer.app.player.gestures.verticalSide
 import com.videoplayer.core.model.MediaItem
 import com.videoplayer.core.model.formatDuration
+import com.videoplayer.core.playback.AbLoop
+import com.videoplayer.core.playback.FRAME_STEP_MS
 import com.videoplayer.core.playback.PlayerStatus
+import com.videoplayer.core.playback.abLoopTarget
+import com.videoplayer.core.playback.clampSpeed
+import com.videoplayer.core.playback.isSleepExpired
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 
@@ -91,6 +96,14 @@ fun PlayerScreen(
     var gestureSeq by remember { mutableIntStateOf(0) }
     var speedBoostActive by remember { mutableStateOf(false) }
     var aspectMode by remember { mutableStateOf(AspectMode.FIT) }
+
+    // A-B repeat state (resets when the media item changes)
+    var abLoop by remember(item.uri) { mutableStateOf(AbLoop()) }
+
+    // Sleep timer state
+    var sleepDeadlineMs by remember { mutableStateOf<Long?>(null) }
+    var sleepAtEndOfVideo by remember { mutableStateOf(false) }
+    val sleepActive = sleepDeadlineMs != null || sleepAtEndOfVideo
 
     BackHandler(onBack = onBack)
 
@@ -134,6 +147,21 @@ fun PlayerScreen(
             delay(GESTURE_OVERLAY_MS)
             gestureLabel = null
         }
+    }
+
+    // A-B repeat enforcement: when position reaches or passes B, seek back to A.
+    LaunchedEffect(state.positionMs, abLoop) {
+        abLoopTarget(state.positionMs, abLoop)?.let { engine.seekTo(it) }
+    }
+
+    // Sleep timer enforcement: poll once per second; pause when the deadline is reached.
+    LaunchedEffect(sleepDeadlineMs) {
+        val deadline = sleepDeadlineMs ?: return@LaunchedEffect
+        while (!isSleepExpired(deadline, System.currentTimeMillis())) {
+            delay(1_000L)
+        }
+        engine.pause()
+        sleepDeadlineMs = null
     }
 
     val latestPositionMs by rememberUpdatedState(state.positionMs)
@@ -310,6 +338,44 @@ fun PlayerScreen(
                     interactionTick++
                 },
                 onBack = onBack,
+                currentSpeed = state.speed,
+                onSetSpeed = { speed ->
+                    engine.setSpeed(clampSpeed(speed))
+                    interactionTick++
+                },
+                onFrameStep = { delta ->
+                    val s = engine.state.value
+                    engine.pause()
+                    engine.seekTo(seekTarget(s.positionMs, delta, s.durationMs))
+                    interactionTick++
+                },
+                abLoop = abLoop,
+                onToggleAb = {
+                    abLoop = when {
+                        abLoop.startMs == null -> abLoop.copy(startMs = engine.state.value.positionMs)
+                        abLoop.endMs == null -> abLoop.copy(endMs = engine.state.value.positionMs)
+                        else -> AbLoop()
+                    }
+                    interactionTick++
+                },
+                sleepActive = sleepActive,
+                onPickSleep = { option ->
+                    when (option) {
+                        SleepOption.OFF -> {
+                            sleepDeadlineMs = null
+                            sleepAtEndOfVideo = false
+                        }
+                        SleepOption.END_OF_VIDEO -> {
+                            sleepAtEndOfVideo = true
+                            sleepDeadlineMs = null
+                        }
+                        else -> {
+                            sleepAtEndOfVideo = false
+                            sleepDeadlineMs = System.currentTimeMillis() + option.minutes!! * 60_000L
+                        }
+                    }
+                    interactionTick++
+                },
             )
         }
 
