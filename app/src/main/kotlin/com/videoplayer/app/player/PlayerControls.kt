@@ -65,6 +65,8 @@ fun PlayerControls(
     onLock: () -> Unit,
     orientationLabel: String,
     onCycleOrientation: () -> Unit,
+    pipSupported: Boolean,
+    onEnterPip: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var speedMenuExpanded by remember { mutableStateOf(false) }
@@ -92,6 +94,11 @@ fun PlayerControls(
         ) {
             TextButton(onClick = onCycleAspect) {
                 Text(aspectLabel, color = Color.White)
+            }
+            if (pipSupported) {
+                TextButton(onClick = onEnterPip) {
+                    Text("PiP", color = Color.White)
+                }
             }
             IconButton(onClick = onLock) {
                 Icon(

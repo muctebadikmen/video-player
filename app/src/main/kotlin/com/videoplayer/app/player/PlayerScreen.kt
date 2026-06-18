@@ -80,9 +80,11 @@ import com.videoplayer.core.playback.OrientationMode
 import com.videoplayer.core.playback.PlayerStatus
 import com.videoplayer.core.playback.UNLOCK_HOLD_MS
 import com.videoplayer.core.playback.abLoopTarget
+import com.videoplayer.core.playback.clampPipAspect
 import com.videoplayer.core.playback.clampSpeed
 import com.videoplayer.core.playback.isSleepExpired
 import com.videoplayer.core.playback.nextOrientationMode
+import com.videoplayer.core.playback.pipAvailable
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -148,6 +150,21 @@ fun PlayerScreen(
     var locked by remember(item.uri) { mutableStateOf(false) }
     var orientationMode by remember(item.uri) { mutableStateOf(OrientationMode.AUTO) }
     val keyGuard = remember(activity) { activity as? HardwareKeyGuard }
+
+    // P1.F-2: Picture-in-Picture. The Activity implements PipController; PiP entry is API 26+.
+    val pipController = remember(activity) { activity as? PipController }
+    val inPip = pipController?.pipMode?.value ?: false
+    val pipSupported = pipAvailable(Build.VERSION.SDK_INT, settingEnabled = true)
+
+    // Keep PiP params current (aspect) and auto-enter-on-home enabled while actually playing.
+    LaunchedEffect(state.isPlaying, state.videoAspectRatio, pipSupported) {
+        if (pipSupported) {
+            val (n, d) = clampPipAspect(state.videoAspectRatio)
+            pipController?.setAutoEnterPip(enabled = state.isPlaying, aspectNum = n, aspectDen = d)
+        }
+    }
+    // Entering PiP hides the controls; nothing should overlay the floating window.
+    LaunchedEffect(inPip) { if (inPip) controlsVisible = false }
 
     // A-B repeat state (resets when the media item changes)
     var abLoop by remember(item.uri) { mutableStateOf(AbLoop()) }
@@ -440,7 +457,7 @@ fun PlayerScreen(
             },
         )
 
-        AnimatedVisibility(visible = controlsVisible) {
+        AnimatedVisibility(visible = controlsVisible && !inPip) {
             PlayerControls(
                 state = state,
                 aspectLabel = aspectMode.displayLabel(),
@@ -506,13 +523,21 @@ fun PlayerScreen(
                     playerViewModel.persistOrientation(item.uri, ai)
                     interactionTick++
                 },
+                pipSupported = pipSupported,
+                onEnterPip = {
+                    val (n, d) = clampPipAspect(state.videoAspectRatio)
+                    pipController?.enterPip(n, d)
+                    interactionTick++
+                },
             )
         }
 
-        gestureLabel?.let { GestureOverlay(label = it) }
-        if (speedBoostActive) GestureOverlay(label = "${BOOST_SPEED.toInt()}×")
+        if (!inPip) {
+            gestureLabel?.let { GestureOverlay(label = it) }
+            if (speedBoostActive) GestureOverlay(label = "${BOOST_SPEED.toInt()}×")
+        }
 
-        if (locked) {
+        if (locked && !inPip) {
             var hintVisible by remember { mutableStateOf(true) }
             var holdProgress by remember { mutableFloatStateOf(0f) }
             // While a hold is in progress, keep the affordance on-screen so the 3s unlock

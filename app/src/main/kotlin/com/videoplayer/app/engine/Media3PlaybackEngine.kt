@@ -121,6 +121,9 @@ class Media3PlaybackEngine(context: Context) : PlaybackEngine {
             val c = try {
                 future.get()
             } catch (e: Exception) {
+                if (e !is java.util.concurrent.CancellationException) {
+                    android.util.Log.w("Media3Engine", "MediaController connect failed", e)
+                }
                 return@addListener
             }
             controller = c
