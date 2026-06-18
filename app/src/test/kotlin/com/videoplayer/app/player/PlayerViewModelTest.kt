@@ -13,9 +13,11 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
-import kotlinx.coroutines.withContext
 import org.junit.After
 import org.junit.Before
 import org.junit.Rule
@@ -28,7 +30,7 @@ import org.robolectric.RobolectricTestRunner
 @RunWith(RobolectricTestRunner::class)
 class PlayerViewModelTest {
 
-    @get:Rule val mainDispatcherRule = MainDispatcherRule()
+    @get:Rule val mainDispatcherRule = MainDispatcherRule(UnconfinedTestDispatcher())
     @get:Rule val tmp = TemporaryFolder()
 
     private lateinit var db: AppDatabase
@@ -47,33 +49,23 @@ class PlayerViewModelTest {
 
     @After fun tearDown() {
         db.close()
+        dsScope.cancel()
     }
 
     @Test fun `load publishes resolved defaults for an unknown file`() = runTest {
         val vm = PlayerViewModel(repo)
         vm.load("file:///unknown.mp4")
-        // viewModelScope runs on Dispatchers.Main (test dispatcher); DataStore on IO.
-        // Drain the test scheduler first, then yield to IO threads to let DataStore emit.
-        advanceUntilIdle()
-        withContext(Dispatchers.IO) { Thread.sleep(200) }
-        advanceUntilIdle()
-        val r = vm.resolved.value!!
+        val r = vm.resolved.filterNotNull().first()
         assertThat(r.startPositionMs).isEqualTo(0L)
         assertThat(r.aspectMode).isEqualTo("FIT")
         assertThat(r.speed).isEqualTo(1f)
     }
 
-    @Test fun `persist then load resumes the saved position`() = runTest {
+    @Test fun `load resumes a previously persisted position`() = runTest {
+        repo.persist("u", positionMs = 42_000, durationMs = 120_000, speed = 1f, aspectMode = "FILL", nowEpochMs = 1L)
         val vm = PlayerViewModel(repo)
-        vm.persist("u", positionMs = 42_000, durationMs = 120_000, speed = 1f, aspectMode = "FILL")
-        advanceUntilIdle()
-        withContext(Dispatchers.IO) { Thread.sleep(200) }
-        advanceUntilIdle()
         vm.load("u")
-        advanceUntilIdle()
-        withContext(Dispatchers.IO) { Thread.sleep(200) }
-        advanceUntilIdle()
-        val r = vm.resolved.value!!
+        val r = vm.resolved.filterNotNull().first()
         assertThat(r.startPositionMs).isEqualTo(42_000L)
         assertThat(r.aspectMode).isEqualTo("FILL")
     }
