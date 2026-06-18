@@ -78,4 +78,26 @@ class PlaybackMemoryRepositoryTest {
         assertThat(r.startPositionMs).isEqualTo(30_000L)
         assertThat(r.aspectMode).isEqualTo("ZOOM")
     }
+
+    @Test fun `resolveStart exposes saved orientation, or null when absent`() = runTest {
+        assertThat(repo.resolveStart("none").orientation).isNull()
+        repo.persistOrientation("u", orientation = 6, nowEpochMs = 5L)
+        assertThat(repo.resolveStart("u").orientation).isEqualTo(6)
+    }
+
+    @Test fun `persistOrientation writes orientation and preserves position, speed, aspect`() = runTest {
+        repo.persist("u", positionMs = 30_000, durationMs = 120_000, speed = 1.5f, aspectMode = "ZOOM", nowEpochMs = 1L)
+        repo.persistOrientation("u", orientation = 0, nowEpochMs = 2L)
+        val r = repo.resolveStart("u")
+        assertThat(r.orientation).isEqualTo(0)
+        assertThat(r.startPositionMs).isEqualTo(30_000L)
+        assertThat(r.speed).isEqualTo(1.5f)
+        assertThat(r.aspectMode).isEqualTo("ZOOM")
+    }
+
+    @Test fun `persist after persistOrientation preserves the saved orientation`() = runTest {
+        repo.persistOrientation("u", orientation = 6, nowEpochMs = 1L)
+        repo.persist("u", positionMs = 10_000, durationMs = 120_000, speed = 2f, aspectMode = "FILL", nowEpochMs = 2L)
+        assertThat(repo.resolveStart("u").orientation).isEqualTo(6)
+    }
 }

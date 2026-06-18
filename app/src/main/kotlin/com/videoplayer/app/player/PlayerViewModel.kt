@@ -41,6 +41,10 @@ class PlayerViewModel(private val repo: PlaybackMemoryRepository) : ViewModel() 
         }
     }
 
+    fun persistOrientation(mediaUri: String, orientation: Int?) {
+        viewModelScope.launch { repo.persistOrientation(mediaUri, orientation, System.currentTimeMillis()) }
+    }
+
     companion object {
         fun factory(context: Context): ViewModelProvider.Factory = viewModelFactory {
             initializer {

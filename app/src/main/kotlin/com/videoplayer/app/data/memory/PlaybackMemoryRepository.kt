@@ -34,7 +34,7 @@ class PlaybackMemoryRepository(
         } else {
             0L
         }
-        return ResolvedStartSettings(startPositionMs, speed, aspectMode)
+        return ResolvedStartSettings(startPositionMs, speed, aspectMode, saved?.orientation)
     }
 
     suspend fun persist(
@@ -63,6 +63,20 @@ class PlaybackMemoryRepository(
                 updatedAtEpochMs = nowEpochMs,
             ),
         )
+    }
+
+    /**
+     * Persists only the per-file orientation override, leaving position/duration/speed/aspect
+     * untouched. Unlike [persist] there is no `durationMs <= 0` guard — orientation is a valid
+     * standalone preference that can be set before any playback state exists.
+     */
+    suspend fun persistOrientation(mediaUri: String, orientation: Int?, nowEpochMs: Long) {
+        val existing = dao.getByUri(mediaUri)
+        val base = existing ?: PlaybackMemoryEntity(
+            mediaUri = mediaUri, positionMs = 0, durationMs = 0,
+            aspectMode = "FIT", speed = 1f, updatedAtEpochMs = 0L,
+        )
+        dao.upsert(base.copy(orientation = orientation, updatedAtEpochMs = nowEpochMs))
     }
 
     /** Observes every persisted memory row — used by the library for progress + continue-watching. */

@@ -5,4 +5,6 @@ data class ResolvedStartSettings(
     val startPositionMs: Long,
     val speed: Float,
     val aspectMode: String,
+    /** Per-file orientation override (ActivityInfo.screenOrientation int), or null for no override. */
+    val orientation: Int?,
 )
