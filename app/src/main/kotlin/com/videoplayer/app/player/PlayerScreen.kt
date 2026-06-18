@@ -3,8 +3,12 @@ package com.videoplayer.app.player
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
+import android.content.pm.ActivityInfo
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.awaitLongPressOrCancellation
@@ -13,7 +17,14 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -23,9 +34,12 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.lifecycle.Lifecycle
@@ -54,11 +68,18 @@ import com.videoplayer.core.model.formatDuration
 import com.videoplayer.core.model.nextInFolder
 import com.videoplayer.core.playback.AbLoop
 import com.videoplayer.core.playback.FRAME_STEP_MS
+import com.videoplayer.core.playback.LOCK_HINT_VISIBLE_MS
+import com.videoplayer.core.playback.OrientationMode
 import com.videoplayer.core.playback.PlayerStatus
+import com.videoplayer.core.playback.UNLOCK_HOLD_MS
 import com.videoplayer.core.playback.abLoopTarget
 import com.videoplayer.core.playback.clampSpeed
 import com.videoplayer.core.playback.isSleepExpired
+import com.videoplayer.core.playback.nextOrientationMode
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.math.roundToInt
 
 private const val AUTO_HIDE_MS = 3_000L
@@ -102,6 +123,13 @@ fun PlayerScreen(
     var gestureSeq by remember { mutableIntStateOf(0) }
     var speedBoostActive by remember { mutableStateOf(false) }
     var aspectMode by remember { mutableStateOf(AspectMode.FIT) }
+    val aspectModeState = rememberUpdatedState(aspectMode)
+
+    // P1.E-2: Kids Lock + per-file orientation override.
+    var locked by remember(item.uri) { mutableStateOf(false) }
+    var orientationMode by remember(item.uri) { mutableStateOf(OrientationMode.AUTO) }
+    var capturedVideoRatio by remember { mutableFloatStateOf(0f) }
+    val keyGuard = remember(activity) { activity as? HardwareKeyGuard }
 
     // A-B repeat state (resets when the media item changes)
     var abLoop by remember(item.uri) { mutableStateOf(AbLoop()) }
@@ -111,7 +139,24 @@ fun PlayerScreen(
     var sleepAtEndOfVideo by remember { mutableStateOf(false) }
     val sleepActive = sleepDeadlineMs != null || sleepAtEndOfVideo
 
-    BackHandler(onBack = onBack)
+    BackHandler { if (!locked) onBack() }
+
+    // Apply a resolved per-file orientation as soon as it arrives (can precede READY),
+    // and always reset to UNSPECIFIED on dispose so we never leak a lock to other screens.
+    LaunchedEffect(resolved) {
+        val o = resolved?.orientation
+        if (o != null) {
+            orientationMode = orientationModeFromActivityInfo(o)
+            activity?.requestedOrientation = o
+        }
+    }
+    DisposableEffect(activity) {
+        onDispose { activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED }
+    }
+
+    // Kids Lock: while locked, ask the Activity to swallow volume/mute hardware keys.
+    LaunchedEffect(locked) { keyGuard?.setHardwareKeysBlocked(locked) }
+    DisposableEffect(keyGuard) { onDispose { keyGuard?.setHardwareKeysBlocked(false) } }
 
     LaunchedEffect(item.uri) {
         playerViewModel.load(item.uri)
@@ -230,7 +275,8 @@ fun PlayerScreen(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .pointerInput(Unit) {
+            .pointerInput(locked) {
+                if (locked) return@pointerInput
                 detectTapGestures(
                     onTap = {
                         controlsVisible = !controlsVisible
@@ -252,7 +298,8 @@ fun PlayerScreen(
                     },
                 )
             }
-            .pointerInput(Unit) {
+            .pointerInput(locked) {
+                if (locked) return@pointerInput
                 var side = VerticalSide.BRIGHTNESS
                 detectVerticalDragGestures(
                     onDragStart = { offset -> side = verticalSide(offset.x, size.width.toFloat()) },
@@ -275,7 +322,8 @@ fun PlayerScreen(
                     },
                 )
             }
-            .pointerInput(Unit) {
+            .pointerInput(locked) {
+                if (locked) return@pointerInput
                 var totalDx = 0f
                 var startPos = 0L
                 var dur = 0L
@@ -302,7 +350,8 @@ fun PlayerScreen(
                     },
                 )
             }
-            .pointerInput(Unit) {
+            .pointerInput(locked) {
+                if (locked) return@pointerInput
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
                     if (awaitLongPressOrCancellation(down.id) != null) {
@@ -323,15 +372,36 @@ fun PlayerScreen(
                     view.useController = false
                     view.setBackgroundColor(android.graphics.Color.BLACK)
                     engine.attachToView(view)
+                    val cf = view.findViewById<AspectRatioFrameLayout>(androidx.media3.ui.R.id.exo_content_frame)
+                    cf?.setAspectRatioListener { targetAspectRatio, _, _ ->
+                        when (aspectModeState.value) {
+                            AspectMode.FIT, AspectMode.FILL, AspectMode.ZOOM ->
+                                if (targetAspectRatio > 0f) capturedVideoRatio = targetAspectRatio
+                            else -> {}
+                        }
+                    }
                 }
             },
             update = { view ->
-                view.resizeMode = when (aspectMode) {
-                    AspectMode.FIT -> AspectRatioFrameLayout.RESIZE_MODE_FIT
-                    AspectMode.FILL -> AspectRatioFrameLayout.RESIZE_MODE_FILL
-                    AspectMode.ZOOM -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
-                    // P1.E-2 UI task wires real 16:9 / 4:3 letterboxing; until then they render as FIT.
-                    AspectMode.RATIO_16_9, AspectMode.RATIO_4_3 -> AspectRatioFrameLayout.RESIZE_MODE_FIT
+                val cf = view.findViewById<AspectRatioFrameLayout>(androidx.media3.ui.R.id.exo_content_frame)
+                when (aspectMode) {
+                    AspectMode.FIT -> {
+                        if (capturedVideoRatio > 0f) cf?.setAspectRatio(capturedVideoRatio)
+                        view.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+                    }
+                    AspectMode.FILL -> view.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FILL
+                    AspectMode.ZOOM -> {
+                        if (capturedVideoRatio > 0f) cf?.setAspectRatio(capturedVideoRatio)
+                        view.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                    }
+                    AspectMode.RATIO_16_9 -> {
+                        cf?.setAspectRatio(16f / 9f)
+                        view.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+                    }
+                    AspectMode.RATIO_4_3 -> {
+                        cf?.setAspectRatio(4f / 3f)
+                        view.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+                    }
                 }
             },
             onRelease = { view ->
@@ -397,11 +467,80 @@ fun PlayerScreen(
                     }
                     interactionTick++
                 },
+                onLock = { locked = true; controlsVisible = false },
+                orientationLabel = orientationMode.shortLabel(),
+                onCycleOrientation = {
+                    orientationMode = nextOrientationMode(orientationMode)
+                    val ai = orientationMode.toActivityInfo()
+                    activity?.requestedOrientation = ai
+                    playerViewModel.persistOrientation(item.uri, ai)
+                    interactionTick++
+                },
             )
         }
 
         gestureLabel?.let { GestureOverlay(label = it) }
         if (speedBoostActive) GestureOverlay(label = "${BOOST_SPEED.toInt()}×")
+
+        if (locked) {
+            var hintVisible by remember { mutableStateOf(true) }
+            var holdProgress by remember { mutableFloatStateOf(0f) }
+            LaunchedEffect(hintVisible) {
+                if (hintVisible) { delay(LOCK_HINT_VISIBLE_MS); hintVisible = false }
+            }
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .pointerInput(Unit) { detectTapGestures(onTap = { hintVisible = true }) },
+            ) {
+                if (hintVisible) {
+                    Column(
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .pointerInput(Unit) {
+                                detectTapGestures(
+                                    onPress = {
+                                        holdProgress = 0f
+                                        val unlocked = coroutineScope {
+                                            val anim = Animatable(0f)
+                                            val job = launch {
+                                                anim.animateTo(
+                                                    1f,
+                                                    tween(UNLOCK_HOLD_MS.toInt(), easing = LinearEasing),
+                                                ) { holdProgress = value }
+                                            }
+                                            val releasedEarly =
+                                                withTimeoutOrNull(UNLOCK_HOLD_MS) { tryAwaitRelease() } != null
+                                            job.cancel()
+                                            !releasedEarly
+                                        }
+                                        holdProgress = 0f
+                                        if (unlocked) locked = false
+                                    },
+                                )
+                            },
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            if (holdProgress > 0f) {
+                                CircularProgressIndicator(
+                                    progress = { holdProgress },
+                                    modifier = Modifier.size(72.dp),
+                                    color = Color.White,
+                                )
+                            }
+                            Icon(
+                                imageVector = Icons.Filled.Lock,
+                                contentDescription = "Locked",
+                                tint = Color.White,
+                                modifier = Modifier.size(40.dp),
+                            )
+                        }
+                        Text("Hold to unlock", color = Color.White)
+                    }
+                }
+            }
+        }
     }
 }
 

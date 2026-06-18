@@ -16,6 +16,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -61,6 +62,9 @@ fun PlayerControls(
     onToggleAb: () -> Unit,
     sleepActive: Boolean,
     onPickSleep: (SleepOption) -> Unit,
+    onLock: () -> Unit,
+    orientationLabel: String,
+    onCycleOrientation: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var speedMenuExpanded by remember { mutableStateOf(false) }
@@ -82,11 +86,20 @@ fun PlayerControls(
             )
         }
 
-        TextButton(
-            onClick = onCycleAspect,
+        Row(
             modifier = Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(aspectLabel, color = Color.White)
+            TextButton(onClick = onCycleAspect) {
+                Text(aspectLabel, color = Color.White)
+            }
+            IconButton(onClick = onLock) {
+                Icon(
+                    Icons.Filled.Lock,
+                    contentDescription = "Lock screen",
+                    tint = Color.White,
+                )
+            }
         }
 
         IconButton(
@@ -204,6 +217,11 @@ fun PlayerControls(
                             )
                         }
                     }
+                }
+
+                // Orientation cycle
+                TextButton(onClick = onCycleOrientation) {
+                    Text(orientationLabel, color = Color.White)
                 }
             }
 
