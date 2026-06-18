@@ -8,6 +8,7 @@ import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Before
@@ -40,6 +41,7 @@ class PlaybackMemoryRepositoryTest {
 
     @After fun tearDown() {
         db.close()
+        dsScope.cancel()
     }
 
     @Test fun `resolveStart with no saved row uses global defaults`() = runTest {
