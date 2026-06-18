@@ -100,15 +100,14 @@ fun PlayerScreen(
     LaunchedEffect(engine) {
         engine.setMediaUri(item.uri)
     }
-    // Apply resolved settings once the engine is prepared (READY or BUFFERING) and start
-    // playing. The start position comes from persisted data (not live duration), so applying
-    // as soon as the player leaves IDLE guarantees play() fires even for short clips whose
-    // READY window may not coincide with `resolved` arriving.
+    // Apply resolved settings once the engine is READY and start playing. We wait for READY
+    // (not BUFFERING) because the resume seek only lands reliably after the timeline is
+    // established — seeking during BUFFERING drops the position (verified on device). This
+    // never strands play(): the player stays in READY until we call play() (playWhenReady is
+    // false), and the effect re-keys on `resolved`, so a late-arriving resolved is caught.
     LaunchedEffect(state.status, resolved) {
         val r = resolved
-        if (!resumeApplied && r != null &&
-            (state.status == PlayerStatus.READY || state.status == PlayerStatus.BUFFERING)
-        ) {
+        if (!resumeApplied && r != null && state.status == PlayerStatus.READY) {
             if (r.startPositionMs > 0) engine.seekTo(r.startPositionMs)
             engine.setSpeed(r.speed)
             aspectMode = runCatching { AspectMode.valueOf(r.aspectMode) }.getOrDefault(AspectMode.FIT)
