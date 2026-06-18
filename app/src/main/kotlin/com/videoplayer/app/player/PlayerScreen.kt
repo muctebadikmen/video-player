@@ -330,6 +330,8 @@ fun PlayerScreen(
                     AspectMode.FIT -> AspectRatioFrameLayout.RESIZE_MODE_FIT
                     AspectMode.FILL -> AspectRatioFrameLayout.RESIZE_MODE_FILL
                     AspectMode.ZOOM -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                    // P1.E-2 UI task wires real 16:9 / 4:3 letterboxing; until then they render as FIT.
+                    AspectMode.RATIO_16_9, AspectMode.RATIO_4_3 -> AspectRatioFrameLayout.RESIZE_MODE_FIT
                 }
             },
             onRelease = { view ->
