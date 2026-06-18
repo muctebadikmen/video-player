@@ -28,6 +28,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import com.videoplayer.app.engine.Media3PlaybackEngine
 import com.videoplayer.app.player.controls.DoubleTapAction
@@ -35,11 +36,13 @@ import com.videoplayer.app.player.controls.SKIP_MS
 import com.videoplayer.app.player.controls.doubleTapAction
 import com.videoplayer.app.player.controls.resolveTapZone
 import com.videoplayer.app.player.controls.seekTarget
+import com.videoplayer.app.player.gestures.AspectMode
 import com.videoplayer.app.player.gestures.BOOST_SPEED
 import com.videoplayer.app.player.gestures.VerticalSide
 import com.videoplayer.app.player.gestures.applyBrightness
 import com.videoplayer.app.player.gestures.applyVolumeFactor
 import com.videoplayer.app.player.gestures.horizontalSeekDeltaMs
+import com.videoplayer.app.player.gestures.nextAspectMode
 import com.videoplayer.app.player.gestures.verticalSide
 import com.videoplayer.core.model.MediaItem
 import com.videoplayer.core.model.formatDuration
@@ -76,6 +79,7 @@ fun PlayerScreen(
     var gestureLabel by remember { mutableStateOf<String?>(null) }
     var gestureSeq by remember { mutableIntStateOf(0) }
     var speedBoostActive by remember { mutableStateOf(false) }
+    var aspectMode by remember { mutableStateOf(AspectMode.FIT) }
 
     BackHandler(onBack = onBack)
 
@@ -202,6 +206,13 @@ fun PlayerScreen(
                     engine.attachToView(view)
                 }
             },
+            update = { view ->
+                view.resizeMode = when (aspectMode) {
+                    AspectMode.FIT -> AspectRatioFrameLayout.RESIZE_MODE_FIT
+                    AspectMode.FILL -> AspectRatioFrameLayout.RESIZE_MODE_FILL
+                    AspectMode.ZOOM -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                }
+            },
             onRelease = { view ->
                 view.player = null
                 engine.release()
@@ -211,6 +222,13 @@ fun PlayerScreen(
         AnimatedVisibility(visible = controlsVisible) {
             PlayerControls(
                 state = state,
+                aspectLabel = aspectMode.name.lowercase().replaceFirstChar { it.uppercase() },
+                onCycleAspect = {
+                    aspectMode = nextAspectMode(aspectMode)
+                    gestureLabel = aspectMode.name.lowercase().replaceFirstChar { it.uppercase() }
+                    gestureSeq++
+                    interactionTick++
+                },
                 onPlayPause = {
                     if (state.isPlaying) engine.pause() else engine.play()
                     interactionTick++

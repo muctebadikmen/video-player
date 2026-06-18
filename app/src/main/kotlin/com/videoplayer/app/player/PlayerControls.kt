@@ -17,6 +17,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -35,6 +36,8 @@ import com.videoplayer.core.playback.PlaybackState
 @Composable
 fun PlayerControls(
     state: PlaybackState,
+    aspectLabel: String,
+    onCycleAspect: () -> Unit,
     onPlayPause: () -> Unit,
     onSeekTo: (Long) -> Unit,
     onBack: () -> Unit,
@@ -54,6 +57,13 @@ fun PlayerControls(
                 contentDescription = "Back",
                 tint = Color.White,
             )
+        }
+
+        TextButton(
+            onClick = onCycleAspect,
+            modifier = Modifier.align(Alignment.TopEnd).padding(8.dp),
+        ) {
+            Text(aspectLabel, color = Color.White)
         }
 
         IconButton(
