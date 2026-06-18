@@ -61,10 +61,11 @@ class LibraryViewModel(
     val uiState: StateFlow<LibraryUiState> =
         combine(mediaRepository.observeFolders(), memorySource.observeAll(), controls) { folders, memory, c ->
             val progressByUri = memory.associate { it.mediaUri to progressFraction(it.positionMs, it.durationMs) }
-            val sortedFolders = sortFoldersBy(folders, c.sortKey, c.sortOrder)
+            val sorted = sortFoldersBy(folders, c.sortKey, c.sortOrder)
+            val sortedFolders = sorted
                 .map { it.copy(items = searchItems(it.items, c.query)) }
                 .filter { it.items.isNotEmpty() }
-            val videos = searchItems(allVideos(sortFoldersBy(folders, c.sortKey, c.sortOrder)), c.query)
+            val videos = searchItems(allVideos(sorted), c.query)
             val itemByUri = allVideos(folders).associateBy { it.uri }
             val cw = continueWatching(memory.map { WatchProgress(it.mediaUri, it.positionMs, it.durationMs, it.updatedAtEpochMs) })
                 .mapNotNull { wp -> itemByUri[wp.mediaUri]?.let { LibraryItemUi(it, progressFraction(wp.positionMs, wp.durationMs)) } }
