@@ -132,18 +132,25 @@ fun PlayerScreen(
         }
     }
 
+    val latestPositionMs by rememberUpdatedState(state.positionMs)
+    val latestDurationMs by rememberUpdatedState(state.durationMs)
+    val latestSpeed by rememberUpdatedState(state.speed)
     val latestAspect by rememberUpdatedState(aspectMode)
     val latestBoost by rememberUpdatedState(speedBoostActive)
 
     // Save current state: periodically while playing, and on STOP / dispose.
+    // Reads the last *composed* values rather than engine.state.value, because
+    // AndroidView.onRelease calls engine.release() (resetting the StateFlow to zeros)
+    // during disposal BEFORE this onDispose runs — reading live state here would
+    // clobber the saved resume position with 0.
     fun saveNow() {
         if (!resumeApplied) return
-        val s = engine.state.value
-        val speedToSave = if (latestBoost) 1f else s.speed
+        if (latestDurationMs <= 0L) return
+        val speedToSave = if (latestBoost) 1f else latestSpeed
         playerViewModel.persist(
             mediaUri = item.uri,
-            positionMs = s.positionMs,
-            durationMs = s.durationMs,
+            positionMs = latestPositionMs,
+            durationMs = latestDurationMs,
             speed = speedToSave,
             aspectMode = latestAspect.name,
         )

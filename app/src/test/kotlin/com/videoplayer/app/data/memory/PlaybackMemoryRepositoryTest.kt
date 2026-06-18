@@ -69,4 +69,13 @@ class PlaybackMemoryRepositoryTest {
         repo.persist("u", positionMs = 119_000, durationMs = 120_000, speed = 1f, aspectMode = "FIT", nowEpochMs = 1L)
         assertThat(repo.resolveStart("u").startPositionMs).isEqualTo(0L)
     }
+
+    @Test fun `persist with non-positive duration does not overwrite an existing row`() = runTest {
+        repo.persist("u", positionMs = 30_000, durationMs = 120_000, speed = 1.5f, aspectMode = "ZOOM", nowEpochMs = 1L)
+        // Simulates a save reading a post-release/blank engine state.
+        repo.persist("u", positionMs = 0, durationMs = 0, speed = 1f, aspectMode = "FIT", nowEpochMs = 2L)
+        val r = repo.resolveStart("u")
+        assertThat(r.startPositionMs).isEqualTo(30_000L)
+        assertThat(r.aspectMode).isEqualTo("ZOOM")
+    }
 }

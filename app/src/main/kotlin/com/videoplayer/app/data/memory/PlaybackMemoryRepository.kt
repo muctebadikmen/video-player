@@ -39,6 +39,10 @@ class PlaybackMemoryRepository(
         aspectMode: String,
         nowEpochMs: Long,
     ) {
+        // Never record a blank/unloaded state (e.g. read after engine release) — it would
+        // clobber a previously saved resume position.
+        if (durationMs <= 0L) return
+
         val existing = dao.getByUri(mediaUri)
         val base = existing ?: PlaybackMemoryEntity(
             mediaUri = mediaUri, positionMs = 0, durationMs = 0,
