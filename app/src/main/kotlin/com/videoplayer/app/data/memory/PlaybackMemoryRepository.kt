@@ -2,6 +2,7 @@ package com.videoplayer.app.data.memory
 
 import com.videoplayer.core.playback.effectiveResumePosition
 import com.videoplayer.core.playback.resolvePreference
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 
 /**
@@ -58,4 +59,7 @@ class PlaybackMemoryRepository(
             ),
         )
     }
+
+    /** Observes every persisted memory row — used by the library for progress + continue-watching. */
+    fun observeAll(): Flow<List<PlaybackMemoryEntity>> = dao.observeAll()
 }
