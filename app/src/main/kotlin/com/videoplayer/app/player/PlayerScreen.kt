@@ -124,12 +124,10 @@ fun PlayerScreen(
     var gestureSeq by remember { mutableIntStateOf(0) }
     var speedBoostActive by remember { mutableStateOf(false) }
     var aspectMode by remember { mutableStateOf(AspectMode.FIT) }
-    val aspectModeState = rememberUpdatedState(aspectMode)
 
     // P1.E-2: Kids Lock + per-file orientation override.
     var locked by remember(item.uri) { mutableStateOf(false) }
     var orientationMode by remember(item.uri) { mutableStateOf(OrientationMode.AUTO) }
-    var capturedVideoRatio by remember { mutableFloatStateOf(0f) }
     val keyGuard = remember(activity) { activity as? HardwareKeyGuard }
 
     // A-B repeat state (resets when the media item changes)
@@ -142,14 +140,15 @@ fun PlayerScreen(
 
     BackHandler { if (!locked) onBack() }
 
-    // Apply a resolved per-file orientation as soon as it arrives (can precede READY),
-    // and always reset to UNSPECIFIED on dispose so we never leak a lock to other screens.
-    LaunchedEffect(resolved) {
-        val o = resolved?.orientation
-        if (o != null) {
-            orientationMode = orientationModeFromActivityInfo(o)
-            activity?.requestedOrientation = o
-        }
+    // Apply the per-file orientation. Keyed on item.uri (NOT just resolved): on auto-advance
+    // PlayerScreen is reused, and `resolved` is a StateFlow that dedupes equal values, so two
+    // files with identical resolved settings would skip this and leak the previous file's forced
+    // orientation. Re-keying on item.uri guarantees a re-evaluation per file; a file with no saved
+    // override applies UNSPECIFIED, releasing any prior lock (including a manual one).
+    LaunchedEffect(item.uri, resolved) {
+        val r = resolved
+        orientationMode = if (r != null) orientationModeFromActivityInfo(r.orientation) else OrientationMode.AUTO
+        activity?.requestedOrientation = r?.orientation ?: ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
     }
     DisposableEffect(activity) {
         onDispose { activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED }
@@ -373,26 +372,23 @@ fun PlayerScreen(
                     view.useController = false
                     view.setBackgroundColor(android.graphics.Color.BLACK)
                     engine.attachToView(view)
-                    val cf = view.findViewById<AspectRatioFrameLayout>(androidx.media3.ui.R.id.exo_content_frame)
-                    cf?.setAspectRatioListener { targetAspectRatio, _, _ ->
-                        when (aspectModeState.value) {
-                            AspectMode.FIT, AspectMode.FILL, AspectMode.ZOOM ->
-                                if (targetAspectRatio > 0f) capturedVideoRatio = targetAspectRatio
-                            else -> {}
-                        }
-                    }
                 }
             },
             update = { view ->
+                // FIT/ZOOM use the video's intrinsic ratio (from the engine, reactive via state);
+                // the named ratios force a fixed-ratio letterboxed frame. Restoring the intrinsic
+                // ratio explicitly is what lets a ratio→FIT switch render correctly even when the
+                // video started in a named-ratio mode.
                 val cf = view.findViewById<AspectRatioFrameLayout>(androidx.media3.ui.R.id.exo_content_frame)
+                val natural = state.videoAspectRatio
                 when (aspectMode) {
                     AspectMode.FIT -> {
-                        if (capturedVideoRatio > 0f) cf?.setAspectRatio(capturedVideoRatio)
+                        if (natural > 0f) cf?.setAspectRatio(natural)
                         view.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
                     }
                     AspectMode.FILL -> view.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FILL
                     AspectMode.ZOOM -> {
-                        if (capturedVideoRatio > 0f) cf?.setAspectRatio(capturedVideoRatio)
+                        if (natural > 0f) cf?.setAspectRatio(natural)
                         view.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
                     }
                     AspectMode.RATIO_16_9 -> {

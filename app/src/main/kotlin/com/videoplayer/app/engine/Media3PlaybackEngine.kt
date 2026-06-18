@@ -3,6 +3,7 @@ package com.videoplayer.app.engine
 import android.content.Context
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
+import androidx.media3.common.VideoSize
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.SeekParameters
 import androidx.media3.ui.PlayerView
@@ -37,6 +38,13 @@ fun exoStateToStatus(playbackState: Int): PlayerStatus = when (playbackState) {
     Player.STATE_ENDED -> PlayerStatus.ENDED
     else -> PlayerStatus.IDLE
 }
+
+/**
+ * Pixel-corrected display aspect ratio (width / height) for a video frame, or 0 when unknown
+ * (a zero dimension). [pixelWidthHeightRatio] accounts for anamorphic / non-square pixels.
+ */
+fun videoAspectRatio(width: Int, height: Int, pixelWidthHeightRatio: Float): Float =
+    if (width == 0 || height == 0) 0f else width * pixelWidthHeightRatio / height
 
 /**
  * Media3/ExoPlayer implementation of [PlaybackEngine].
@@ -74,6 +82,15 @@ class Media3PlaybackEngine(context: Context) : PlaybackEngine {
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 _state.update { it.copy(isPlaying = isPlaying) }
                 if (isPlaying) startPositionUpdates() else stopPositionUpdates()
+            }
+
+            override fun onVideoSizeChanged(videoSize: VideoSize) {
+                val ratio = videoAspectRatio(
+                    videoSize.width,
+                    videoSize.height,
+                    videoSize.pixelWidthHeightRatio,
+                )
+                _state.update { it.copy(videoAspectRatio = ratio) }
             }
         })
     }

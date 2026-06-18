@@ -14,5 +14,7 @@ data class PlaybackState(
     val positionMs: Long = 0,
     val durationMs: Long = 0,
     val speed: Float = 1f,
+    /** Intrinsic display aspect ratio (width/height, pixel-corrected) of the current video; 0 until known. */
+    val videoAspectRatio: Float = 0f,
     val engine: EngineType = EngineType.MEDIA3,
 )
