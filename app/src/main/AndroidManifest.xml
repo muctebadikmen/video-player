@@ -17,6 +17,8 @@
             android:name=".MainActivity"
             android:configChanges="orientation|screenSize|smallestScreenSize|keyboardHidden|screenLayout"
             android:exported="true"
+            android:launchMode="singleTask"
+            android:supportsPictureInPicture="true"
             android:theme="@style/Theme.VideoPlayer">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
