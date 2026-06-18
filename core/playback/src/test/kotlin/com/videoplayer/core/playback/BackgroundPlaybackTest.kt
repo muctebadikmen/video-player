@@ -16,4 +16,10 @@ class BackgroundPlaybackTest {
     @Test fun `audioSessionId defaults to zero`() {
         assertThat(PlaybackState().audioSessionId).isEqualTo(0)
     }
+    @Test fun `plays in background when setting enabled`() {
+        assertThat(shouldPlayInBackground(settingEnabled = true)).isTrue()
+    }
+    @Test fun `does not play in background when setting disabled`() {
+        assertThat(shouldPlayInBackground(settingEnabled = false)).isFalse()
+    }
 }

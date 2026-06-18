@@ -22,6 +22,7 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>) {
     private object Keys {
         val RESUME_ENABLED = booleanPreferencesKey("resume_enabled")
         val DEFAULT_SPEED = floatPreferencesKey("default_speed")
+        val BACKGROUND_PLAYBACK = booleanPreferencesKey("background_playback")
     }
 
     val resumeEnabled: Flow<Boolean> = dataStore.data.map { it[Keys.RESUME_ENABLED] ?: true }
@@ -33,5 +34,12 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>) {
 
     suspend fun setDefaultSpeed(speed: Float) {
         dataStore.edit { it[Keys.DEFAULT_SPEED] = speed }
+    }
+
+    val backgroundPlaybackEnabled: Flow<Boolean> =
+        dataStore.data.map { it[Keys.BACKGROUND_PLAYBACK] ?: true }
+
+    suspend fun setBackgroundPlaybackEnabled(enabled: Boolean) {
+        dataStore.edit { it[Keys.BACKGROUND_PLAYBACK] = enabled }
     }
 }

@@ -6,3 +6,6 @@ package com.videoplayer.core.playback
  */
 fun shouldStopOnTaskRemoved(playWhenReady: Boolean, mediaItemCount: Int): Boolean =
     !playWhenReady || mediaItemCount == 0
+
+/** Whether playback should continue when the player leaves the foreground. */
+fun shouldPlayInBackground(settingEnabled: Boolean): Boolean = settingEnabled
