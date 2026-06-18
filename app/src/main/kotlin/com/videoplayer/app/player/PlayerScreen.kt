@@ -5,8 +5,13 @@ import android.content.Context
 import android.content.ContextWrapper
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitLongPressOrCancellation
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -30,11 +35,14 @@ import com.videoplayer.app.player.controls.SKIP_MS
 import com.videoplayer.app.player.controls.doubleTapAction
 import com.videoplayer.app.player.controls.resolveTapZone
 import com.videoplayer.app.player.controls.seekTarget
+import com.videoplayer.app.player.gestures.BOOST_SPEED
 import com.videoplayer.app.player.gestures.VerticalSide
 import com.videoplayer.app.player.gestures.applyBrightness
 import com.videoplayer.app.player.gestures.applyVolumeFactor
+import com.videoplayer.app.player.gestures.horizontalSeekDeltaMs
 import com.videoplayer.app.player.gestures.verticalSide
 import com.videoplayer.core.model.MediaItem
+import com.videoplayer.core.model.formatDuration
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 
@@ -67,6 +75,7 @@ fun PlayerScreen(
     var volumeFactor by remember { mutableFloatStateOf(volumeController.currentFactor()) }
     var gestureLabel by remember { mutableStateOf<String?>(null) }
     var gestureSeq by remember { mutableIntStateOf(0) }
+    var speedBoostActive by remember { mutableStateOf(false) }
 
     BackHandler(onBack = onBack)
 
@@ -142,6 +151,46 @@ fun PlayerScreen(
                         gestureSeq++
                     },
                 )
+            }
+            .pointerInput(Unit) {
+                var totalDx = 0f
+                var startPos = 0L
+                var dur = 0L
+                var target = 0L
+                detectHorizontalDragGestures(
+                    onDragStart = {
+                        val s = engine.state.value
+                        totalDx = 0f
+                        startPos = s.positionMs
+                        dur = s.durationMs
+                        target = startPos
+                    },
+                    onHorizontalDrag = { change, dragAmount ->
+                        change.consume()
+                        totalDx += dragAmount
+                        target = seekTarget(startPos, horizontalSeekDeltaMs(totalDx, size.width.toFloat()), dur)
+                        val arrow = if (target >= startPos) "»" else "«"
+                        gestureLabel = "$arrow ${formatDuration(target)}"
+                        gestureSeq++
+                    },
+                    onDragEnd = {
+                        engine.seekTo(target)
+                        interactionTick++
+                    },
+                )
+            }
+            .pointerInput(Unit) {
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    if (awaitLongPressOrCancellation(down.id) != null) {
+                        val previousSpeed = engine.state.value.speed
+                        engine.setSpeed(BOOST_SPEED)
+                        speedBoostActive = true
+                        waitForUpOrCancellation()
+                        engine.setSpeed(previousSpeed)
+                        speedBoostActive = false
+                    }
+                }
             },
     ) {
         AndroidView(
@@ -175,6 +224,7 @@ fun PlayerScreen(
         }
 
         gestureLabel?.let { GestureOverlay(label = it) }
+        if (speedBoostActive) GestureOverlay(label = "${BOOST_SPEED.toInt()}×")
     }
 }
 
