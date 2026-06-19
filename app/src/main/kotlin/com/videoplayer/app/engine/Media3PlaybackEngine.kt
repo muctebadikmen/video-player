@@ -280,16 +280,19 @@ class Media3PlaybackEngine(context: Context) : PlaybackEngine {
         val parsed = id?.let { parseTextTrackId(it) }
         val textGroups = latestTracks?.groups?.filter { it.type == C.TRACK_TYPE_TEXT }.orEmpty()
         val group = parsed?.first?.let { textGroups.getOrNull(it) }
-        if (parsed != null && group != null && parsed.second < group.length) {
+        if (id != null && parsed != null && group != null &&
+            parsed.second < group.length && group.isTrackSupported(parsed.second)
+        ) {
             builder.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
                 .setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup, parsed.second))
+            c.trackSelectionParameters = builder.build()
+            _state.update { it.copy(selectedTextTrackId = id) }
         } else {
-            // null id (disable) or unknown/stale id: turn embedded text off.
+            // null id (disable) or stale/unsupported id: turn embedded text off.
             builder.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+            c.trackSelectionParameters = builder.build()
+            _state.update { it.copy(selectedTextTrackId = null) }
         }
-        c.trackSelectionParameters = builder.build()
-        // Optimistic reflect; onTracksChanged refines selectedTextTrackId after selection settles.
-        _state.update { it.copy(selectedTextTrackId = if (group != null && parsed != null) id else null) }
     }
 
     /** Stop + clear the service player. Used when exiting the player to the library. */

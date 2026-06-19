@@ -86,8 +86,11 @@ import com.videoplayer.core.model.formatDuration
 import com.videoplayer.core.playback.AbLoop
 import com.videoplayer.core.playback.FRAME_STEP_MS
 import com.videoplayer.core.playback.SubtitleCue
+import com.videoplayer.core.playback.SubtitleSelection
 import com.videoplayer.core.playback.activeCueText
 import com.videoplayer.core.playback.nudgeSubtitleOffset
+import com.videoplayer.core.playback.parseSubtitleToken
+import com.videoplayer.core.playback.subtitleMemoryToken
 import com.videoplayer.core.playback.LOCK_HINT_VISIBLE_MS
 import com.videoplayer.core.playback.OrientationMode
 import com.videoplayer.core.playback.PlayerStatus
@@ -203,6 +206,9 @@ fun PlayerScreen(
     var selectedSubtitleUri by remember(currentItem.uri) { mutableStateOf<String?>(null) }
     var subtitleOffsetMs by remember(currentItem.uri) { mutableStateOf(0L) }
     var subtitleCues by remember(currentItem.uri) { mutableStateOf<List<SubtitleCue>>(emptyList()) }
+    // Restore guard: flips to true once the remembered subtitle for this file has been applied.
+    // Until then, saveNow() re-writes the resolved (saved) token so early saves can't wipe it.
+    var subtitleRestored by remember(currentItem.uri) { mutableStateOf(false) }
     val subtitleOptions = remember(siblingSubtitles, externalSubtitles) {
         (siblingSubtitles + externalSubtitles).distinctBy { it.uri }
     }
@@ -286,6 +292,34 @@ fun PlayerScreen(
         engine.selectEmbeddedTextTrack(null)
     }
 
+    // Restore the remembered subtitle selection + offset once resolved settings (and, for an
+    // embedded track, the track list) are available. Guarded so it runs once per file.
+    LaunchedEffect(currentItem.uri, resolved, state.textTracks) {
+        val r = resolved ?: return@LaunchedEffect
+        if (subtitleRestored) return@LaunchedEffect
+        when (val sel = parseSubtitleToken(r.subtitleTrackId)) {
+            is SubtitleSelection.Off -> subtitleRestored = true // default-off effect already disabled embedded
+            is SubtitleSelection.External -> {
+                val uri = sel.uri
+                val name = subtitleDisplayName(context, Uri.parse(uri))
+                    ?: uri.substringAfterLast('/').ifEmpty { "Subtitle" }
+                externalSubtitles = (externalSubtitles + SubtitleOption(uri, name)).distinctBy { it.uri }
+                subtitleOffsetMs = r.subtitleOffsetMs
+                engine.selectEmbeddedTextTrack(null)
+                selectedSubtitleUri = uri
+                subtitleRestored = true
+            }
+            is SubtitleSelection.Embedded -> {
+                if (state.textTracks.any { it.id == sel.id }) {
+                    selectedSubtitleUri = null
+                    engine.selectEmbeddedTextTrack(sel.id)
+                    subtitleRestored = true
+                }
+                // else: track not present yet — wait for state.textTracks to update (effect re-runs).
+            }
+        }
+    }
+
     // Cue load: parse the selected subtitle file whenever the selection changes.
     LaunchedEffect(selectedSubtitleUri) {
         val uri = selectedSubtitleUri
@@ -360,6 +394,12 @@ fun PlayerScreen(
     val latestBoost by rememberUpdatedState(speedBoostActive)
     val latestCurrentUri by rememberUpdatedState(currentItem.uri)
     val latestBackgroundEnabled by rememberUpdatedState(backgroundEnabled)
+    val subtitleToken = subtitleMemoryToken(state.selectedTextTrackId, selectedSubtitleUri)
+    val latestSubtitleToken by rememberUpdatedState(subtitleToken)
+    val latestSubtitleOffset by rememberUpdatedState(subtitleOffsetMs)
+    val latestSubtitleRestored by rememberUpdatedState(subtitleRestored)
+    val latestResolvedToken by rememberUpdatedState(resolved?.subtitleTrackId)
+    val latestResolvedOffset by rememberUpdatedState(resolved?.subtitleOffsetMs ?: 0L)
 
     // Save current state: periodically while playing, and on STOP / dispose.
     // Reads the last *composed* values rather than engine.state.value, because
@@ -370,12 +410,16 @@ fun PlayerScreen(
         if (!resumeApplied) return
         if (latestDurationMs <= 0L) return
         val speedToSave = if (latestBoost) 1f else latestSpeed
+        val subTokenToSave = if (latestSubtitleRestored) latestSubtitleToken else latestResolvedToken
+        val subOffsetToSave = if (latestSubtitleRestored) latestSubtitleOffset else latestResolvedOffset
         playerViewModel.persist(
             mediaUri = latestCurrentUri,
             positionMs = latestPositionMs,
             durationMs = latestDurationMs,
             speed = speedToSave,
             aspectMode = latestAspect.name,
+            subtitleTrackId = subTokenToSave,
+            subtitleOffsetMs = subOffsetToSave,
         )
     }
 
