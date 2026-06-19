@@ -1,4 +1,4 @@
-package com.videoplayer.app.data.memory
+package com.videoplayer.app.library
 
 import android.content.Context
 import android.graphics.Bitmap

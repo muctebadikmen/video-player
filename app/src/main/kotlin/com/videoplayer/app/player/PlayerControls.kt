@@ -42,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import com.videoplayer.app.player.subtitle.SubtitleOption
 import com.videoplayer.core.model.formatDuration
 import com.videoplayer.core.playback.AbLoop
+import com.videoplayer.core.playback.FRAME_STEP_MS
 import com.videoplayer.core.playback.PlaybackState
 import com.videoplayer.core.playback.SPEED_PRESETS
 import com.videoplayer.core.playback.SUBTITLE_NUDGE_MS
@@ -186,7 +187,7 @@ fun PlayerControls(
                 }
 
                 // Frame-step previous
-                IconButton(onClick = { onFrameStep(-com.videoplayer.core.playback.FRAME_STEP_MS) }) {
+                IconButton(onClick = { onFrameStep(-FRAME_STEP_MS) }) {
                     Icon(
                         Icons.AutoMirrored.Filled.KeyboardArrowLeft,
                         contentDescription = "Previous frame",
@@ -195,7 +196,7 @@ fun PlayerControls(
                 }
 
                 // Frame-step next
-                IconButton(onClick = { onFrameStep(com.videoplayer.core.playback.FRAME_STEP_MS) }) {
+                IconButton(onClick = { onFrameStep(FRAME_STEP_MS) }) {
                     Icon(
                         Icons.AutoMirrored.Filled.KeyboardArrowRight,
                         contentDescription = "Next frame",

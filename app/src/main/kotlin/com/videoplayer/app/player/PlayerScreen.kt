@@ -10,6 +10,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.OpenableColumns
+import android.view.WindowManager
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -267,7 +268,13 @@ fun PlayerScreen(
         activity?.requestedOrientation = r?.orientation ?: ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
     }
     DisposableEffect(activity) {
-        onDispose { activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED }
+        onDispose {
+            activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            // Release the brightness override so system-controlled brightness resumes outside the player.
+            activity?.window?.let { w ->
+                w.attributes = w.attributes.apply { screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE }
+            }
+        }
     }
 
     // Kids Lock: while locked, ask the Activity to swallow volume/mute hardware keys.
@@ -385,6 +392,8 @@ fun PlayerScreen(
         abLoopTarget(state.positionMs, abLoop)?.let { engine.seekTo(it) }
     }
 
+    // The duration sleep timer is wall-clock and spans auto-advance (unlike the per-file A–B loop,
+    // which resets per media item).
     // Sleep timer enforcement: poll once per second; pause when the deadline is reached.
     LaunchedEffect(sleepDeadlineMs) {
         val deadline = sleepDeadlineMs ?: return@LaunchedEffect
