@@ -69,7 +69,9 @@ suspend fun synthesizeMediaItem(context: Context, uri: Uri): MediaItem =
             }
         }
 
-        val duration = runCatching {
+        val duration = if (uri.scheme == "http" || uri.scheme == "https") {
+            0L
+        } else runCatching {
             val retriever = MediaMetadataRetriever()
             try {
                 retriever.setDataSource(context, uri)
