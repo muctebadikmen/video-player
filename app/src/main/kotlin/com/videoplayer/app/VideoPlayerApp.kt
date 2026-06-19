@@ -20,6 +20,7 @@ import com.videoplayer.app.data.memory.settingsDataStore
 import com.videoplayer.app.library.LibraryScreen
 import com.videoplayer.app.library.LibraryViewModel
 import com.videoplayer.app.player.PlayerScreen
+import com.videoplayer.app.settings.SettingsScreen
 import com.videoplayer.core.model.MediaItem
 
 /**
@@ -39,6 +40,7 @@ fun VideoPlayerApp() {
 
     val uiState by libraryViewModel.uiState.collectAsStateWithLifecycle()
     var selected by remember { mutableStateOf<MediaItem?>(null) }
+    var showSettings by remember { mutableStateOf(false) }
     val current = selected
     val playlist = remember(current, uiState.folders, uiState.videos) {
         val c = current ?: return@remember emptyList()
@@ -47,20 +49,19 @@ fun VideoPlayerApp() {
             ?: listOf(c)
     }
 
-    if (current != null) {
-        PlayerScreen(
+    when {
+        current != null -> PlayerScreen(
             playlist = playlist,
             startUri = current.uri,
             onBack = { selected = null },
         )
-    } else {
-        Scaffold { innerPadding ->
+        showSettings -> SettingsScreen(onBack = { showSettings = false })
+        else -> Scaffold { innerPadding ->
             LibraryScreen(
                 viewModel = libraryViewModel,
                 onItemClick = { selected = it },
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding),
+                onOpenSettings = { showSettings = true },
+                modifier = Modifier.fillMaxSize().padding(innerPadding),
             )
         }
     }

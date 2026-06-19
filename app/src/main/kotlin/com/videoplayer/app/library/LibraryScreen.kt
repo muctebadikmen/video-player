@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
@@ -85,6 +86,7 @@ private val readVideoPermission: String
 fun LibraryScreen(
     viewModel: LibraryViewModel,
     onItemClick: (MediaItem) -> Unit,
+    onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -120,6 +122,7 @@ fun LibraryScreen(
             onToggleViewMode = {
                 viewModel.setViewMode(if (state.viewMode == ViewMode.LIST) ViewMode.GRID else ViewMode.LIST)
             },
+            onOpenSettings = onOpenSettings,
         )
 
         if (state.continueWatching.isNotEmpty()) {
@@ -167,6 +170,7 @@ private fun LibraryTopBar(
     onSortChange: (SortKey, SortOrder) -> Unit,
     viewMode: ViewMode,
     onToggleViewMode: () -> Unit,
+    onOpenSettings: () -> Unit,
 ) {
     var sortMenuExpanded by remember { mutableStateOf(false) }
 
@@ -242,6 +246,9 @@ private fun LibraryTopBar(
             } else {
                 Icon(Icons.AutoMirrored.Filled.List, contentDescription = "Switch to list view")
             }
+        }
+        IconButton(onClick = onOpenSettings) {
+            Icon(Icons.Default.Settings, contentDescription = "Settings")
         }
     }
 }
