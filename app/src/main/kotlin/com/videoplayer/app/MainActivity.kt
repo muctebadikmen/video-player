@@ -2,7 +2,9 @@
 package com.videoplayer.app
 
 import android.app.PictureInPictureParams
+import android.content.Intent
 import android.content.res.Configuration
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.util.Rational
@@ -10,7 +12,10 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.State
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import com.videoplayer.app.intent.externalVideoUriFromIntent
 import com.videoplayer.app.player.HardwareKeyGuard
 import com.videoplayer.app.player.PipController
 import com.videoplayer.app.theme.AppTheme
@@ -19,15 +24,28 @@ class MainActivity : ComponentActivity(), HardwareKeyGuard, PipController {
     @Volatile private var hardwareKeysBlocked = false
     private val _pipMode = mutableStateOf(false)
     override val pipMode: State<Boolean> get() = _pipMode
+    private var externalUri by mutableStateOf<Uri?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        externalUri = externalVideoUriFromIntent(intent)
         setContent {
             AppTheme {
-                VideoPlayerApp()
+                VideoPlayerApp(
+                    externalUri = externalUri,
+                    onExternalConsumed = { externalUri = null },
+                )
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        // singleTask re-enters this instance instead of recreating it; adopt the new intent so
+        // getIntent()/our state reflect the latest open-with, then surface its URI.
+        setIntent(intent)
+        externalUri = externalVideoUriFromIntent(intent)
     }
 
     override fun setHardwareKeysBlocked(blocked: Boolean) {
