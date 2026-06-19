@@ -73,6 +73,8 @@ import com.videoplayer.app.player.subtitle.CueOverlay
 import com.videoplayer.app.player.subtitle.SiblingSubtitleScanner
 import com.videoplayer.app.player.subtitle.SubtitleLoader
 import com.videoplayer.app.player.subtitle.SubtitleOption
+import com.videoplayer.app.player.subtitle.SubtitleSearchSheet
+import com.videoplayer.app.player.subtitle.SubtitleSearchViewModel
 import com.videoplayer.app.player.controls.SKIP_MS
 import com.videoplayer.app.player.controls.doubleTapAction
 import com.videoplayer.app.player.controls.resolveTapZone
@@ -135,6 +137,7 @@ fun PlayerScreen(
     playlist: List<MediaItem>,
     startUri: String,
     onBack: () -> Unit,
+    onOpenSettings: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     // Caller (VideoPlayerApp) always passes a non-empty playlist; this guard is the very
@@ -266,6 +269,11 @@ fun PlayerScreen(
             selectedSubtitleUri = option.uri
         }
     }
+    val searchViewModel: SubtitleSearchViewModel =
+        viewModel(factory = SubtitleSearchViewModel.factory(context))
+    val searchState by searchViewModel.uiState.collectAsStateWithLifecycle()
+    var showSearchSheet by remember { mutableStateOf(false) }
+
     LaunchedEffect(Unit) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS)
@@ -711,6 +719,10 @@ fun PlayerScreen(
                     selectedSubtitleUri = uri
                 },
                 onLoadSubtitleFile = { subtitlePicker.launch(arrayOf("*/*")) },
+                onSearchOnline = {
+                    showSearchSheet = true
+                    searchViewModel.search(context, currentItem.uri, currentItem.displayName)
+                },
                 onNudgeSubtitle = { delta -> subtitleOffsetMs = nudgeSubtitleOffset(subtitleOffsetMs, delta) },
                 subtitleRate = subtitleRate,
                 onAdjustRate = { delta ->
@@ -766,6 +778,28 @@ fun PlayerScreen(
                     .align(Alignment.BottomCenter)
                     .navigationBarsPadding()
                     .padding(start = 24.dp, end = 24.dp, bottom = 72.dp),
+            )
+        }
+
+        if (showSearchSheet) {
+            SubtitleSearchSheet(
+                state = searchState,
+                onDownload = { result ->
+                    searchViewModel.download(context, result, currentItem.displayName) { savedUri ->
+                        if (savedUri != null) {
+                            // Mirror the SAF callback: register + select the downloaded subtitle.
+                            val name = subtitleDisplayName(context, Uri.parse(savedUri))
+                                ?: savedUri.substringAfterLast('/').ifEmpty { "Subtitle" }
+                            val option = SubtitleOption(savedUri, name)
+                            externalSubtitles = (externalSubtitles + option).distinctBy { it.uri }
+                            engine.selectEmbeddedTextTrack(null)
+                            selectedSubtitleUri = savedUri
+                            showSearchSheet = false
+                        }
+                    }
+                },
+                onOpenSettings = onOpenSettings,
+                onDismiss = { showSearchSheet = false },
             )
         }
 

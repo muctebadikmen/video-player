@@ -72,12 +72,18 @@ fun VideoPlayerApp(
                     externalItem = null
                     onExternalConsumed()
                 },
+                onOpenSettings = {
+                    externalItem = null
+                    onExternalConsumed()
+                    showSettings = true
+                },
             )
         }
         current != null -> PlayerScreen(
             playlist = playlist,
             startUri = current.uri,
             onBack = { selected = null },
+            onOpenSettings = { selected = null; showSettings = true },
         )
         showSettings -> SettingsScreen(onBack = { showSettings = false })
         else -> Scaffold { innerPadding ->

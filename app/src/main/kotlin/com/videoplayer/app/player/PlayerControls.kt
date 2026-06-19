@@ -82,6 +82,7 @@ fun PlayerControls(
     subtitleOffsetMs: Long,
     onSelectSubtitle: (String?) -> Unit,
     onLoadSubtitleFile: () -> Unit,
+    onSearchOnline: () -> Unit,
     onNudgeSubtitle: (Long) -> Unit,
     subtitleRate: Float,
     onAdjustRate: (Float) -> Unit,
@@ -282,6 +283,13 @@ fun PlayerControls(
                             text = { Text("Load subtitle file…") },
                             onClick = {
                                 onLoadSubtitleFile()
+                                subtitleMenuExpanded = false
+                            },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Search online (OpenSubtitles)") },
+                            onClick = {
+                                onSearchOnline()
                                 subtitleMenuExpanded = false
                             },
                         )
