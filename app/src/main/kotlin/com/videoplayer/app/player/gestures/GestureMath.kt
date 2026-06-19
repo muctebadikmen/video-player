@@ -17,6 +17,15 @@ enum class VerticalSide { BRIGHTNESS, VOLUME }
 fun verticalSide(x: Float, width: Float): VerticalSide =
     if (width > 0f && x >= width / 2f) VerticalSide.VOLUME else VerticalSide.BRIGHTNESS
 
+/**
+ * Normalizes the Android system brightness setting (raw 0..[max]) into a 0f..1f fraction
+ * for seeding the brightness gesture state on player entry. Returns [fallback] when the
+ * setting is unknown (raw < 0); otherwise clamps to a small floor so the screen is never
+ * driven fully dark by a seed value.
+ */
+fun systemBrightnessFraction(raw: Int, max: Int = 255, fallback: Float = 0.5f): Float =
+    if (raw < 0) fallback else (raw.toFloat() / max).coerceIn(0.01f, 1f)
+
 /** New brightness (0..1) after a vertical drag; dragging **up** (negative dy) raises it. */
 fun applyBrightness(current: Float, dragYpx: Float, heightPx: Float): Float {
     if (heightPx <= 0f) return current

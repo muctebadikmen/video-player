@@ -49,4 +49,24 @@ class GestureMathTest {
     @Test fun `seek zero width is zero`() {
         assertThat(horizontalSeekDeltaMs(50f, 0f)).isEqualTo(0L)
     }
+
+    @Test fun `unknown system brightness returns fallback`() {
+        assertThat(systemBrightnessFraction(-1)).isEqualTo(0.5f)
+    }
+
+    @Test fun `zero system brightness floors at 0_01`() {
+        assertThat(systemBrightnessFraction(0)).isWithin(1e-4f).of(0.01f)
+    }
+
+    @Test fun `max system brightness is full`() {
+        assertThat(systemBrightnessFraction(255)).isWithin(1e-4f).of(1f)
+    }
+
+    @Test fun `mid system brightness is half`() {
+        assertThat(systemBrightnessFraction(128)).isWithin(2e-3f).of(0.502f)
+    }
+
+    @Test fun `system brightness above max clamps to 1`() {
+        assertThat(systemBrightnessFraction(300)).isEqualTo(1f)
+    }
 }

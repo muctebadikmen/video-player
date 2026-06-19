@@ -11,6 +11,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.provider.OpenableColumns
+import android.provider.Settings
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -82,6 +83,7 @@ import com.videoplayer.app.player.gestures.applyVolumeFactor
 import com.videoplayer.app.player.gestures.displayLabel
 import com.videoplayer.app.player.gestures.horizontalSeekDeltaMs
 import com.videoplayer.app.player.gestures.nextAspectMode
+import com.videoplayer.app.player.gestures.systemBrightnessFraction
 import com.videoplayer.app.player.gestures.verticalSide
 import com.videoplayer.core.model.MediaItem
 import com.videoplayer.core.model.formatDuration
@@ -169,7 +171,13 @@ fun PlayerScreen(
     var controlsVisible by remember { mutableStateOf(true) }
     var interactionTick by remember { mutableIntStateOf(0) }
 
-    var brightness by remember { mutableFloatStateOf(0.5f) }
+    // Seed the gesture state from the real system brightness so the HUD baseline is accurate and
+    // the first swipe doesn't jump the screen. The 3-arg getInt with default -1 never throws and
+    // needs no permission; the window keeps system brightness until the first drag overrides it.
+    val initialBrightness = remember {
+        systemBrightnessFraction(Settings.System.getInt(context.contentResolver, Settings.System.SCREEN_BRIGHTNESS, -1))
+    }
+    var brightness by remember { mutableFloatStateOf(initialBrightness) }
     var volumeFactor by remember { mutableFloatStateOf(volumeController.currentFactor()) }
     var gestureLabel by remember { mutableStateOf<String?>(null) }
     var gestureSeq by remember { mutableIntStateOf(0) }
