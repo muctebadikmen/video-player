@@ -12,3 +12,7 @@ build/
 *.keystore
 !debug.keystore
 .kotlin/
+
+# Release signing (never commit)
+keystore.properties
+*.jks
