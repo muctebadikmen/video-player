@@ -1,0 +1,14 @@
+Video Player is an ad-free, account-free, fully open-source video player for Android. The philosophy is simple: open and play, never think.
+
+Features:
+
+* Smooth gesture controls — swipe for brightness and volume (up to 200%), drag to seek, long-press to fast-forward, double-tap to skip.
+* Smart resume — every file remembers where you left off, plus your speed, aspect ratio, and orientation.
+* Subtitles — load external SRT/VTT files, auto-detect a same-name subtitle in the folder, pick embedded tracks, and fine-tune timing with a ±50ms sync nudge. Each file remembers your subtitle choice.
+* Picture-in-Picture and background audio — keep watching in a floating window or keep listening while you use other apps.
+* Playback tools — pitch-corrected speed, A–B repeat, frame-by-frame stepping, and a sleep timer (by time or at the end of the video).
+* Locks — Kids Lock blocks accidental touches; orientation lock is remembered per file.
+* Clean library — a media-only folder browser with search, sort, thumbnails, and a Continue Watching row.
+* Material You theming with a true-black AMOLED dark mode.
+
+Privacy first: no ads, no accounts, no trackers, no analytics. The app requests no internet permission at all — it simply cannot phone home.

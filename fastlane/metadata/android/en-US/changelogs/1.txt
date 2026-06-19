@@ -1,0 +1,10 @@
+First release.
+
+* Gesture controls: brightness, volume (to 200%), drag-seek, long-press speed, double-tap skip.
+* Smart resume of position, speed, aspect, and orientation per file.
+* Subtitles: external SRT/VTT, same-name auto-detect, embedded tracks, per-file memory, ±50ms sync nudge.
+* Picture-in-Picture and background audio with a media notification.
+* Speed (pitch-corrected), A–B repeat, frame-by-frame step, sleep timer.
+* Kids Lock and per-file orientation lock.
+* Folder library with search, sort, thumbnails, and Continue Watching.
+* Material You with true-black AMOLED. No ads, no trackers, no internet permission.
