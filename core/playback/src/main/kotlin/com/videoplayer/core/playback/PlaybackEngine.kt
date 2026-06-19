@@ -35,4 +35,10 @@ interface PlaybackEngine {
 
     /** When true, pause at the end of each media item instead of advancing. */
     fun setPauseAtEndOfMediaItems(enabled: Boolean)
+
+    /**
+     * Select an embedded text (subtitle) track by its [id] (from [PlaybackState.textTracks]),
+     * or pass null to disable embedded text output. Ids are engine-defined and opaque to callers.
+     */
+    fun selectEmbeddedTextTrack(id: String?)
 }

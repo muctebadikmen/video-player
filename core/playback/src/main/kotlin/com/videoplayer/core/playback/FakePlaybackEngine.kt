@@ -43,4 +43,6 @@ class FakePlaybackEngine(private val fakeDurationMs: Long = 0) : PlaybackEngine 
     override fun setPauseAtEndOfMediaItems(enabled: Boolean) {
         pauseAtEndOfMediaItems = enabled
     }
+
+    override fun selectEmbeddedTextTrack(id: String?) = _state.update { it.copy(selectedTextTrackId = id) }
 }

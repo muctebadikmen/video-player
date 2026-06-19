@@ -19,4 +19,8 @@ data class PlaybackState(
     val engine: EngineType = EngineType.MEDIA3,
     val audioSessionId: Int = 0,
     val currentMediaIndex: Int = 0,
+    /** Embedded (in-container) subtitle tracks of the current media; empty until known. */
+    val textTracks: List<TextTrackInfo> = emptyList(),
+    /** Id of the selected embedded text track (see PlaybackEngine.selectEmbeddedTextTrack), or null when none/disabled. */
+    val selectedTextTrackId: String? = null,
 )

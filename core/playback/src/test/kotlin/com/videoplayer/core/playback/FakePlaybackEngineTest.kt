@@ -56,4 +56,18 @@ class FakePlaybackEngineTest {
         engine.release()
         assertThat(engine.state.value).isEqualTo(PlaybackState())
     }
+
+    @Test fun `textTracks default empty and no track selected`() = runTest {
+        val e = FakePlaybackEngine()
+        assertThat(e.state.value.textTracks).isEmpty()
+        assertThat(e.state.value.selectedTextTrackId).isNull()
+    }
+
+    @Test fun `selectEmbeddedTextTrack updates and clears selectedTextTrackId`() = runTest {
+        val e = FakePlaybackEngine()
+        e.selectEmbeddedTextTrack("text:0:1")
+        assertThat(e.state.value.selectedTextTrackId).isEqualTo("text:0:1")
+        e.selectEmbeddedTextTrack(null)
+        assertThat(e.state.value.selectedTextTrackId).isNull()
+    }
 }
