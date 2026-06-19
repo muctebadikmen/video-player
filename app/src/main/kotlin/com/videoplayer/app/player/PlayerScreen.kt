@@ -91,9 +91,11 @@ import com.videoplayer.core.model.MediaItem
 import com.videoplayer.core.model.formatDuration
 import com.videoplayer.core.playback.AbLoop
 import com.videoplayer.core.playback.FRAME_STEP_MS
+import com.videoplayer.core.playback.DEFAULT_SUBTITLE_RATE
 import com.videoplayer.core.playback.SubtitleCue
 import com.videoplayer.core.playback.SubtitleSelection
 import com.videoplayer.core.playback.activeCueText
+import com.videoplayer.core.playback.twoPointSync
 import com.videoplayer.core.playback.nudgeSubtitleOffset
 import com.videoplayer.core.playback.parseSubtitleToken
 import com.videoplayer.core.playback.subtitleMemoryToken
@@ -226,6 +228,13 @@ fun PlayerScreen(
     }
     val subtitleToken = subtitleMemoryToken(state.selectedTextTrackId, selectedSubtitleUri)
 
+    var subtitleRate by remember(currentItem.uri) { mutableStateOf(1.0f) }
+    // Two-point precise-sync capture (UI-driven). When a "Mark" is taken we store the cue's original
+    // start (the cue active at that instant, or the nearest upcoming cue) and the real playback time.
+    var twoPointPhase by remember(currentItem.uri) { mutableStateOf(TwoPointPhase.IDLE) }
+    var twoPointFirstOrig by remember(currentItem.uri) { mutableStateOf(0L) }
+    var twoPointFirstWant by remember(currentItem.uri) { mutableStateOf(0L) }
+
     // Sleep timer state
     var sleepDeadlineMs by remember { mutableStateOf<Long?>(null) }
     var sleepAtEndOfVideo by remember { mutableStateOf(false) }
@@ -326,6 +335,7 @@ fun PlayerScreen(
                     ?: uri.substringAfterLast('/').ifEmpty { "Subtitle" }
                 externalSubtitles = (externalSubtitles + SubtitleOption(uri, name)).distinctBy { it.uri }
                 subtitleOffsetMs = r.subtitleOffsetMs
+                subtitleRate = r.subtitleRate
                 engine.selectEmbeddedTextTrack(null)
                 selectedSubtitleUri = uri
                 subtitleRestored = true
@@ -348,12 +358,15 @@ fun PlayerScreen(
 
     // Persist a subtitle change immediately (so it survives even if the user pauses and exits
     // before any periodic save). Mirrors persistOrientation. Skips the no-op fire right after
-    // restore by comparing against the saved (resolved) value.
-    LaunchedEffect(subtitleToken, subtitleOffsetMs, subtitleRestored, currentItem.uri) {
+    // restore by comparing against the saved (resolved) values.
+    LaunchedEffect(subtitleToken, subtitleOffsetMs, subtitleRate, subtitleRestored, currentItem.uri) {
         if (!subtitleRestored) return@LaunchedEffect
         val r = resolved
-        if (subtitleToken != r?.subtitleTrackId || subtitleOffsetMs != (r?.subtitleOffsetMs ?: 0L)) {
-            playerViewModel.persistSubtitle(currentItem.uri, subtitleToken, subtitleOffsetMs, subtitleRate = 1.0f)
+        if (subtitleToken != r?.subtitleTrackId ||
+            subtitleOffsetMs != (r?.subtitleOffsetMs ?: 0L) ||
+            subtitleRate != (r?.subtitleRate ?: 1.0f)
+        ) {
+            playerViewModel.persistSubtitle(currentItem.uri, subtitleToken, subtitleOffsetMs, subtitleRate)
         }
     }
 
@@ -700,6 +713,39 @@ fun PlayerScreen(
                 },
                 onLoadSubtitleFile = { subtitlePicker.launch(arrayOf("*/*")) },
                 onNudgeSubtitle = { delta -> subtitleOffsetMs = nudgeSubtitleOffset(subtitleOffsetMs, delta) },
+                subtitleRate = subtitleRate,
+                onAdjustRate = { delta ->
+                    // Clamp to a sane band; 3-decimal granularity, identity stays reachable.
+                    subtitleRate = (subtitleRate + delta).coerceIn(0.5f, 2.0f)
+                },
+                onResetRate = { subtitleRate = 1.0f },
+                twoPointPhase = twoPointPhase,
+                onStartTwoPoint = { twoPointPhase = TwoPointPhase.WAITING_FIRST },
+                onCancelTwoPoint = { twoPointPhase = TwoPointPhase.IDLE },
+                onMarkTwoPoint = {
+                    val want = cueStartForMark(
+                        subtitleCues, state.positionMs, subtitleOffsetMs, subtitleRate.toDouble(),
+                    )
+                    if (want != null) {
+                        when (twoPointPhase) {
+                            TwoPointPhase.WAITING_FIRST -> {
+                                twoPointFirstOrig = state.positionMs
+                                twoPointFirstWant = want
+                                twoPointPhase = TwoPointPhase.WAITING_SECOND
+                            }
+                            TwoPointPhase.WAITING_SECOND -> {
+                                val fit = twoPointSync(
+                                    orig1 = twoPointFirstOrig, want1 = twoPointFirstWant,
+                                    orig2 = state.positionMs, want2 = want,
+                                )
+                                subtitleRate = fit.rate.toFloat().coerceIn(0.5f, 2.0f)
+                                subtitleOffsetMs = fit.offset
+                                twoPointPhase = TwoPointPhase.IDLE
+                            }
+                            TwoPointPhase.IDLE -> { /* no-op: Mark is only shown while capturing */ }
+                        }
+                    }
+                },
                 textTracks = state.textTracks,
                 selectedTextTrackId = state.selectedTextTrackId,
                 onSelectEmbedded = { id ->
@@ -716,7 +762,7 @@ fun PlayerScreen(
 
         if (!inPip) {
             CueOverlay(
-                text = activeCueText(subtitleCues, state.positionMs, subtitleOffsetMs),
+                text = activeCueText(subtitleCues, state.positionMs, subtitleOffsetMs, subtitleRate.toDouble()),
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .navigationBarsPadding()
@@ -789,6 +835,23 @@ fun PlayerScreen(
             }
         }
     }
+}
+
+/**
+ * The original file-start time (ms) of the cue the user is marking for two-point sync. Prefers the
+ * cue currently on screen at [positionMs] under the active correction; if none is showing, falls back
+ * to the next upcoming cue's start (so a tap slightly before a line still captures that line). Null
+ * when there are no cues at/after the position.
+ */
+private fun cueStartForMark(
+    cues: List<com.videoplayer.core.playback.SubtitleCue>,
+    positionMs: Long,
+    offsetMs: Long,
+    rate: Double,
+): Long? {
+    val t = (positionMs * rate).toLong() + offsetMs
+    cues.firstOrNull { t >= it.startMs && t < it.endMs }?.let { return it.startMs }
+    return cues.filter { it.startMs >= t }.minByOrNull { it.startMs }?.startMs
 }
 
 /** Queries the display name for a SAF [Uri] via [OpenableColumns]. Returns null on any failure. */
