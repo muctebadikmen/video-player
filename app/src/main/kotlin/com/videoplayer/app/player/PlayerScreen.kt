@@ -91,7 +91,6 @@ import com.videoplayer.core.model.MediaItem
 import com.videoplayer.core.model.formatDuration
 import com.videoplayer.core.playback.AbLoop
 import com.videoplayer.core.playback.FRAME_STEP_MS
-import com.videoplayer.core.playback.DEFAULT_SUBTITLE_RATE
 import com.videoplayer.core.playback.SubtitleCue
 import com.videoplayer.core.playback.SubtitleSelection
 import com.videoplayer.core.playback.activeCueText
