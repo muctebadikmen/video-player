@@ -79,14 +79,45 @@ private fun parseTimestampMs(token: String): Long? {
     }
 }
 
+/** Identity playback rate for subtitle sync: 1.0 = the subtitle file's own timeline, unscaled. */
+const val DEFAULT_SUBTITLE_RATE: Double = 1.0
+
+/** A linear subtitle-timing correction: effective time = position*[rate] + [offset] ms. */
+data class SyncResult(val rate: Double, val offset: Long)
+
 /**
- * Text of the cue active at [positionMs] shifted by [offsetMs] (offset>0 makes cues
- * appear earlier). Returns null when no cue covers that time. Linear scan — cue lists
- * are modest and this runs on the position tick; fine for V1.
+ * Text of the cue active at [positionMs] after applying a linear timing correction:
+ * `effective = (positionMs * rate).toLong() + offsetMs`. [rate] > 1 makes cues arrive
+ * later relative to playback (stretches the subtitle timeline); [offsetMs] > 0 makes
+ * cues appear earlier (a constant shift). Returns null when no cue covers that time.
+ * Linear scan — cue lists are modest and this runs on the position tick; fine for V1.
  */
-fun activeCueText(cues: List<SubtitleCue>, positionMs: Long, offsetMs: Long): String? {
-    val t = positionMs + offsetMs
+fun activeCueText(
+    cues: List<SubtitleCue>,
+    positionMs: Long,
+    offsetMs: Long,
+    rate: Double = DEFAULT_SUBTITLE_RATE,
+): String? {
+    val t = (positionMs * rate).toLong() + offsetMs
     return cues.firstOrNull { t >= it.startMs && t < it.endMs }?.text
+}
+
+/**
+ * Fit a linear correction from two matched points. The user marks two subtitle lines: for each,
+ * [orig1]/[orig2] is the real playback time the line should appear at (when the user taps "Mark"),
+ * and [want1]/[want2] is that cue's original start time in the subtitle file. We solve
+ * `want = rate*orig + offset` so that [activeCueText] reproduces the marks:
+ *   rate   = (want2 - want1) / (orig2 - orig1)
+ *   offset = want1 - (orig1 * rate).toLong()
+ * Degenerate input ([orig1] == [orig2], i.e. both lines marked at the same instant) yields an
+ * undefined slope; we return the identity correction (no change) rather than throwing, because
+ * the caller is a UI gesture and a no-op is the safer response.
+ */
+fun twoPointSync(orig1: Long, want1: Long, orig2: Long, want2: Long): SyncResult {
+    if (orig2 == orig1) return SyncResult(DEFAULT_SUBTITLE_RATE, 0L)
+    val rate = (want2 - want1).toDouble() / (orig2 - orig1).toDouble()
+    val offset = want1 - (orig1 * rate).toLong()
+    return SyncResult(rate, offset)
 }
 
 /**

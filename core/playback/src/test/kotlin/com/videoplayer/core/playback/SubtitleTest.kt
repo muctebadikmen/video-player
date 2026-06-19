@@ -70,4 +70,63 @@ class SubtitleTest {
         assertThat(parseSubtitleToken("ext:content://x")).isEqualTo(SubtitleSelection.External("content://x"))
         assertThat(parseSubtitleToken("garbage")).isEqualTo(SubtitleSelection.Off)
     }
+
+    @Test fun `activeCueText with rate scales the lookup time`() {
+        // A cue at [10000,11000). At rate 2.0 the lookup time is doubled, so real position 5000
+        // maps to effective 10000 -> the cue is active; 4400 maps to 8800 -> nothing; 5500 -> 11000 (exclusive end) -> nothing.
+        val cues = listOf(SubtitleCue(10_000, 11_000, "x"))
+        assertThat(activeCueText(cues, positionMs = 5000, offsetMs = 0, rate = 2.0)).isEqualTo("x")
+        assertThat(activeCueText(cues, positionMs = 4400, offsetMs = 0, rate = 2.0)).isNull()
+        assertThat(activeCueText(cues, positionMs = 5500, offsetMs = 0, rate = 2.0)).isNull() // 5500*2=11000, exclusive
+    }
+
+    @Test fun `activeCueText default rate matches the legacy three-arg behavior`() {
+        val cues = listOf(SubtitleCue(1000, 2000, "a"))
+        // No rate arg => DEFAULT_SUBTITLE_RATE (1.0): identical to the offset-only lookup.
+        assertThat(activeCueText(cues, 1500, 0)).isEqualTo("a")
+        assertThat(activeCueText(cues, 1500, 0, DEFAULT_SUBTITLE_RATE)).isEqualTo("a")
+        assertThat(DEFAULT_SUBTITLE_RATE).isEqualTo(1.0)
+    }
+
+    @Test fun `activeCueText combines offset and rate`() {
+        // Cue [10000,12000). rate 1.0 + offset 600: real 9500 -> effective 9500+600=10100 -> active.
+        val cues = listOf(SubtitleCue(10_000, 12_000, "c"))
+        assertThat(activeCueText(cues, positionMs = 9500, offsetMs = 600, rate = 1.0)).isEqualTo("c")
+        // rate 1.1 + offset -500: real 10000 -> effective (10000*1.1)=11000 -500 = 10500 -> active.
+        assertThat(activeCueText(cues, positionMs = 10_000, offsetMs = -500, rate = 1.1)).isEqualTo("c")
+    }
+
+    @Test fun `twoPointSync fits rate and offset from two points`() {
+        // Subtitle file runs 4 percent slow: each real second should map to 1.04 subtitle-seconds.
+        // Point 1: the cue whose file-start is 60000 is heard at real time 57692 (=60000/1.04).
+        // Point 2: the cue whose file-start is 600000 is heard at real time 576923 (=600000/1.04).
+        // Fitting want=rate*orig+offset over (orig=real, want=file): rate ~= 1.04, offset ~= 0.
+        val r = twoPointSync(orig1 = 57_692, want1 = 60_000, orig2 = 576_923, want2 = 600_000)
+        assertThat(r.rate).isWithin(1e-3).of(1.04)
+        assertThat(r.offset).isWithin(2L).of(0L)
+    }
+
+    @Test fun `twoPointSync recovers a pure constant delay as rate one`() {
+        // Both lines are simply 3000ms late (constant offset, no drift):
+        // file-start 5000 heard at 8000, file-start 20000 heard at 23000.
+        // want=rate*orig+offset => rate=1.0, offset = 5000 - 8000 = -3000.
+        val r = twoPointSync(orig1 = 8000, want1 = 5000, orig2 = 23_000, want2 = 20_000)
+        assertThat(r.rate).isWithin(1e-9).of(1.0)
+        assertThat(r.offset).isEqualTo(-3000L)
+    }
+
+    @Test fun `twoPointSync returns identity when the two original times are equal`() {
+        val r = twoPointSync(orig1 = 5000, want1 = 7000, orig2 = 5000, want2 = 9000)
+        assertThat(r.rate).isEqualTo(DEFAULT_SUBTITLE_RATE)
+        assertThat(r.offset).isEqualTo(0L)
+    }
+
+    @Test fun `twoPointSync result applied via activeCueText lands the drifted cue`() {
+        // End-to-end: a file drifting 4% slow. Apply the fit, then look up the second line at its
+        // real heard time and confirm the cue is active.
+        val r = twoPointSync(orig1 = 57_692, want1 = 60_000, orig2 = 576_923, want2 = 600_000)
+        val cues = listOf(SubtitleCue(600_000, 602_000, "late line"))
+        assertThat(activeCueText(cues, positionMs = 576_923, offsetMs = r.offset, rate = r.rate))
+            .isEqualTo("late line")
+    }
 }
