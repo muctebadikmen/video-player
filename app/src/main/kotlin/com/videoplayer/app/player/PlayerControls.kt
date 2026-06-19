@@ -45,6 +45,7 @@ import com.videoplayer.core.playback.AbLoop
 import com.videoplayer.core.playback.PlaybackState
 import com.videoplayer.core.playback.SPEED_PRESETS
 import com.videoplayer.core.playback.SUBTITLE_NUDGE_MS
+import com.videoplayer.core.playback.TextTrackInfo
 
 /**
  * Custom playback control overlay rendered on top of the video surface. Renders
@@ -77,6 +78,9 @@ fun PlayerControls(
     onSelectSubtitle: (String?) -> Unit,
     onLoadSubtitleFile: () -> Unit,
     onNudgeSubtitle: (Long) -> Unit,
+    textTracks: List<TextTrackInfo>,
+    selectedTextTrackId: String?,
+    onSelectEmbedded: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var speedMenuExpanded by remember { mutableStateOf(false) }
@@ -214,7 +218,11 @@ fun PlayerControls(
                     TextButton(onClick = { subtitleMenuExpanded = true }) {
                         Text(
                             text = "CC",
-                            color = if (selectedSubtitleUri != null) MaterialTheme.colorScheme.primary else Color.White,
+                            color = if (selectedSubtitleUri != null || selectedTextTrackId != null) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                Color.White
+                            },
                         )
                     }
                     DropdownMenu(
@@ -228,9 +236,23 @@ fun PlayerControls(
                                 subtitleMenuExpanded = false
                             },
                             trailingIcon = {
-                                if (selectedSubtitleUri == null) Icon(Icons.Filled.Check, contentDescription = null)
+                                if (selectedSubtitleUri == null && selectedTextTrackId == null) {
+                                    Icon(Icons.Filled.Check, contentDescription = null)
+                                }
                             },
                         )
+                        textTracks.forEach { track ->
+                            DropdownMenuItem(
+                                text = { Text(track.label) },
+                                onClick = {
+                                    onSelectEmbedded(track.id)
+                                    subtitleMenuExpanded = false
+                                },
+                                trailingIcon = {
+                                    if (selectedTextTrackId == track.id) Icon(Icons.Filled.Check, contentDescription = null)
+                                },
+                            )
+                        }
                         subtitleOptions.forEach { option ->
                             DropdownMenuItem(
                                 text = { Text(option.label) },

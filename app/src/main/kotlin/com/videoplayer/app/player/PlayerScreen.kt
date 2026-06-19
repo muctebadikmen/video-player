@@ -235,6 +235,7 @@ fun PlayerScreen(
             val name = subtitleDisplayName(context, uri) ?: uri.lastPathSegment ?: "Subtitle"
             val option = SubtitleOption(uri.toString(), name)
             externalSubtitles = (externalSubtitles + option).distinctBy { it.uri }
+            engine.selectEmbeddedTextTrack(null)
             selectedSubtitleUri = option.uri
         }
     }
@@ -276,6 +277,13 @@ fun PlayerScreen(
             videoFolderName = currentItem.folderPath.substringAfterLast('/'),
             videoFileName = currentItem.displayName,
         )
+    }
+
+    // Embedded text defaults to OFF on each file: offer-don't-auto-show, and clears any
+    // text-disable/override left from a previous file's external subtitle (track-selection
+    // params persist across ExoPlayer items). The user enables an embedded track via the CC menu.
+    LaunchedEffect(currentItem.uri) {
+        engine.selectEmbeddedTextTrack(null)
     }
 
     // Cue load: parse the selected subtitle file whenever the selection changes.
@@ -604,9 +612,18 @@ fun PlayerScreen(
                 subtitleOptions = subtitleOptions,
                 selectedSubtitleUri = selectedSubtitleUri,
                 subtitleOffsetMs = subtitleOffsetMs,
-                onSelectSubtitle = { selectedSubtitleUri = it },
+                onSelectSubtitle = { uri ->
+                    engine.selectEmbeddedTextTrack(null) // external/off disables embedded text
+                    selectedSubtitleUri = uri
+                },
                 onLoadSubtitleFile = { subtitlePicker.launch(arrayOf("*/*")) },
                 onNudgeSubtitle = { delta -> subtitleOffsetMs = nudgeSubtitleOffset(subtitleOffsetMs, delta) },
+                textTracks = state.textTracks,
+                selectedTextTrackId = state.selectedTextTrackId,
+                onSelectEmbedded = { id ->
+                    selectedSubtitleUri = null // embedded selection clears the custom overlay
+                    engine.selectEmbeddedTextTrack(id)
+                },
             )
         }
 
