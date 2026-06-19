@@ -36,12 +36,14 @@ class OpenSubtitlesClientTest {
         val info = (result as OsResult.Success).value
         assertThat(info.token).isEqualTo("tok123")
         assertThat(info.allowedDownloads).isEqualTo(100)
+        assertThat(info.baseUrl).isEqualTo("https://vip.opensubtitles.com/api/v1")
 
         val req = server.takeRequest()
         assertThat(req.method).isEqualTo("POST")
         assertThat(req.getHeader("Api-Key")).isEqualTo("KEY")
         assertThat(req.getHeader("User-Agent")).isEqualTo("VideoPlayer v1.3.0")
         assertThat(req.getHeader("Accept")).isEqualTo("application/json")
+        assertThat(req.getHeader("Content-Type")).startsWith("application/json")
         assertThat(req.body.readUtf8()).contains("\"username\":\"user\"")
     }
 
