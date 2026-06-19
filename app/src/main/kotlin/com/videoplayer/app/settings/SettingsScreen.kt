@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -29,6 +30,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 fun SettingsScreen(onBack: () -> Unit) {
     val vm: SettingsViewModel = viewModel(factory = SettingsViewModel.factory(LocalContext.current))
     val backgroundEnabled by vm.backgroundPlaybackEnabled.collectAsStateWithLifecycle()
+    val osCreds by vm.osCredentials.collectAsStateWithLifecycle()
+    val osStatus by vm.osLoginStatus.collectAsStateWithLifecycle()
 
     BackHandler { onBack() }
 
@@ -48,6 +51,16 @@ fun SettingsScreen(onBack: () -> Unit) {
                 subtitle = "Keep playing audio and Picture-in-Picture when you leave the player",
                 checked = backgroundEnabled,
                 onCheckedChange = vm::setBackgroundPlayback,
+            )
+            HorizontalDivider()
+            OpenSubtitlesSettings(
+                creds = osCreds,
+                loginStatus = osStatus,
+                onApiKeyChange = vm::setApiKey,
+                onUsernameChange = vm::setUsername,
+                onFavLangsChange = vm::setFavoriteLanguages,
+                onLogin = vm::login,
+                onLogout = vm::logout,
             )
         }
     }
