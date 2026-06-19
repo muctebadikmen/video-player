@@ -202,7 +202,7 @@ fun PlayerScreen(
     var externalSubtitles by remember(currentItem.uri) { mutableStateOf<List<SubtitleOption>>(emptyList()) }
     var selectedSubtitleUri by remember(currentItem.uri) { mutableStateOf<String?>(null) }
     var subtitleOffsetMs by remember(currentItem.uri) { mutableStateOf(0L) }
-    var subtitleCues by remember { mutableStateOf<List<SubtitleCue>>(emptyList()) }
+    var subtitleCues by remember(currentItem.uri) { mutableStateOf<List<SubtitleCue>>(emptyList()) }
     val subtitleOptions = remember(siblingSubtitles, externalSubtitles) {
         (siblingSubtitles + externalSubtitles).distinctBy { it.uri }
     }
