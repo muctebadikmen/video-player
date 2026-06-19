@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package com.videoplayer.app
 
+import android.net.Uri
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -18,6 +20,7 @@ import com.videoplayer.app.data.memory.AppDatabase
 import com.videoplayer.app.data.memory.PlaybackMemoryRepository
 import com.videoplayer.app.data.memory.SettingsRepository
 import com.videoplayer.app.data.memory.settingsDataStore
+import com.videoplayer.app.intent.synthesizeMediaItem
 import com.videoplayer.app.library.LibraryScreen
 import com.videoplayer.app.library.LibraryViewModel
 import com.videoplayer.app.player.PlayerScreen
@@ -29,7 +32,10 @@ import com.videoplayer.core.model.MediaItem
  * no nav library yet (YAGNI); selecting an item shows the player, back returns.
  */
 @Composable
-fun VideoPlayerApp() {
+fun VideoPlayerApp(
+    externalUri: Uri? = null,
+    onExternalConsumed: () -> Unit = {},
+) {
     val appContext = LocalContext.current.applicationContext
     val libraryViewModel: LibraryViewModel = viewModel {
         val db = AppDatabase.getInstance(appContext)
@@ -50,7 +56,24 @@ fun VideoPlayerApp() {
             ?: listOf(c)
     }
 
+    // An "Open with" hands us a foreign URI; synthesize a one-item session that bypasses the library.
+    var externalItem by remember(externalUri) { mutableStateOf<MediaItem?>(null) }
+    LaunchedEffect(externalUri) {
+        externalItem = externalUri?.let { synthesizeMediaItem(appContext, it) }
+    }
+
     when {
+        externalItem != null -> {
+            val item = externalItem!!
+            PlayerScreen(
+                playlist = listOf(item),
+                startUri = item.uri,
+                onBack = {
+                    externalItem = null
+                    onExternalConsumed()
+                },
+            )
+        }
         current != null -> PlayerScreen(
             playlist = playlist,
             startUri = current.uri,
