@@ -55,6 +55,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
+import com.videoplayer.app.data.memory.SettingsRepository
+import com.videoplayer.app.data.memory.settingsDataStore
 import com.videoplayer.app.engine.Media3PlaybackEngine
 import com.videoplayer.app.player.controls.DoubleTapAction
 import com.videoplayer.app.player.controls.SKIP_MS
@@ -84,6 +86,7 @@ import com.videoplayer.core.playback.clampSpeed
 import com.videoplayer.core.playback.isSleepExpired
 import com.videoplayer.core.playback.nextOrientationMode
 import com.videoplayer.core.playback.pipAvailable
+import com.videoplayer.core.playback.shouldPlayInBackground
 import com.videoplayer.core.playback.startIndexFor
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -119,6 +122,8 @@ fun PlayerScreen(
     val context = LocalContext.current
     val activity = remember(context) { context.findActivity() }
     val engine = remember { Media3PlaybackEngine(context) }
+    val settingsRepo = remember(context) { SettingsRepository(context.applicationContext.settingsDataStore) }
+    val backgroundEnabled by settingsRepo.backgroundPlaybackEnabled.collectAsStateWithLifecycle(initialValue = true)
     val state by engine.state.collectAsStateWithLifecycle()
     val startIndex = remember(playlist, startUri) { startIndexFor(playlist.map { it.uri }, startUri) }
     val currentItem = playlist.getOrElse(state.currentMediaIndex) {
@@ -162,7 +167,7 @@ fun PlayerScreen(
     // P1.F-2: Picture-in-Picture. The Activity implements PipController; PiP entry is API 26+.
     val pipController = remember(activity) { activity as? PipController }
     val inPip = pipController?.pipMode?.value ?: false
-    val pipSupported = pipAvailable(Build.VERSION.SDK_INT, settingEnabled = true)
+    val pipSupported = pipAvailable(Build.VERSION.SDK_INT, settingEnabled = shouldPlayInBackground(backgroundEnabled))
 
     // Keep PiP params current (aspect) and auto-enter-on-home enabled while actually playing.
     LaunchedEffect(state.isPlaying, state.videoAspectRatio, pipSupported) {
@@ -286,6 +291,7 @@ fun PlayerScreen(
     val latestAspect by rememberUpdatedState(aspectMode)
     val latestBoost by rememberUpdatedState(speedBoostActive)
     val latestCurrentUri by rememberUpdatedState(currentItem.uri)
+    val latestBackgroundEnabled by rememberUpdatedState(backgroundEnabled)
 
     // Save current state: periodically while playing, and on STOP / dispose.
     // Reads the last *composed* values rather than engine.state.value, because
@@ -316,7 +322,10 @@ fun PlayerScreen(
 
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_STOP) saveNow()
+            if (event == Lifecycle.Event.ON_STOP) {
+                saveNow()
+                if (!latestBackgroundEnabled) engine.pause()
+            }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
