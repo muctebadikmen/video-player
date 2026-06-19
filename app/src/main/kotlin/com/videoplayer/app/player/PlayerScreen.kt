@@ -18,6 +18,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
@@ -609,7 +611,11 @@ fun PlayerScreen(
             },
         )
 
-        AnimatedVisibility(visible = controlsVisible && !inPip) {
+        AnimatedVisibility(
+            visible = controlsVisible && !inPip,
+            enter = fadeIn(),
+            exit = fadeOut(),
+        ) {
             PlayerControls(
                 state = state,
                 aspectLabel = aspectMode.displayLabel(),
