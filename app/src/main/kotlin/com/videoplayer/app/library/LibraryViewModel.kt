@@ -37,6 +37,7 @@ data class LibraryUiState(
     val videos: List<MediaItem> = emptyList(),
     val continueWatching: List<LibraryItemUi> = emptyList(),
     val progressByUri: Map<String, Float> = emptyMap(),
+    val isLoading: Boolean = true,
 )
 
 private data class Controls(
@@ -57,9 +58,10 @@ class LibraryViewModel(
 ) : ViewModel() {
 
     private val controls = MutableStateFlow(Controls())
+    private val loading = MutableStateFlow(true)
 
     val uiState: StateFlow<LibraryUiState> =
-        combine(mediaRepository.observeFolders(), memorySource.observeAll(), controls) { folders, memory, c ->
+        combine(mediaRepository.observeFolders(), memorySource.observeAll(), controls, loading) { folders, memory, c, isLoading ->
             val progressByUri = memory.associate { it.mediaUri to progressFraction(it.positionMs, it.durationMs) }
             val sorted = sortFoldersBy(folders, c.sortKey, c.sortOrder)
             val sortedFolders = sorted
@@ -72,10 +74,11 @@ class LibraryViewModel(
             LibraryUiState(
                 tab = c.tab, viewMode = c.viewMode, sortKey = c.sortKey, sortOrder = c.sortOrder, query = c.query,
                 folders = sortedFolders, videos = videos, continueWatching = cw, progressByUri = progressByUri,
+                isLoading = isLoading,
             )
         }.stateIn(viewModelScope, SharingStarted.Eagerly, LibraryUiState())
 
-    fun refresh() { viewModelScope.launch { mediaRepository.refresh() } }
+    fun refresh() { viewModelScope.launch { mediaRepository.refresh(); loading.value = false } }
     fun setTab(tab: LibraryTab) { controls.value = controls.value.copy(tab = tab) }
     fun setViewMode(mode: ViewMode) { controls.value = controls.value.copy(viewMode = mode) }
     fun setSort(key: SortKey, order: SortOrder) { controls.value = controls.value.copy(sortKey = key, sortOrder = order) }

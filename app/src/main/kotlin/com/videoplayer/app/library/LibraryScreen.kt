@@ -30,10 +30,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
@@ -92,23 +92,19 @@ fun LibraryScreen(
     val context = LocalContext.current
     val state by viewModel.uiState.collectAsStateWithLifecycle()
 
+    var hasPermission by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(context, readVideoPermission) == PackageManager.PERMISSION_GRANTED,
+        )
+    }
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { granted ->
+        hasPermission = granted
         if (granted) viewModel.refresh()
     }
-
     LaunchedEffect(Unit) {
-        val alreadyGranted = ContextCompat.checkSelfPermission(context, readVideoPermission) ==
-            PackageManager.PERMISSION_GRANTED
-        if (alreadyGranted) viewModel.refresh() else permissionLauncher.launch(readVideoPermission)
-    }
-
-    if (state.folders.isEmpty() && state.videos.isEmpty() && state.continueWatching.isEmpty()) {
-        Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("No videos found", style = MaterialTheme.typography.bodyLarge)
-        }
-        return
+        if (hasPermission) viewModel.refresh() else permissionLauncher.launch(readVideoPermission)
     }
 
     Column(modifier = modifier.fillMaxSize()) {
@@ -124,37 +120,47 @@ fun LibraryScreen(
             },
             onOpenSettings = onOpenSettings,
         )
-
-        if (state.continueWatching.isNotEmpty()) {
-            ContinueWatchingRow(items = state.continueWatching, onItemClick = onItemClick)
-        }
-
-        TabRow(selectedTabIndex = state.tab.ordinal) {
-            Tab(
-                selected = state.tab == LibraryTab.FOLDERS,
-                onClick = { viewModel.setTab(LibraryTab.FOLDERS) },
-                text = { Text("Folders") },
-            )
-            Tab(
-                selected = state.tab == LibraryTab.VIDEOS,
-                onClick = { viewModel.setTab(LibraryTab.VIDEOS) },
-                text = { Text("Videos") },
-            )
-        }
-
-        when (state.tab) {
-            LibraryTab.FOLDERS -> FoldersContent(
-                folders = state.folders,
-                viewMode = state.viewMode,
-                progress = state.progressByUri,
-                onItemClick = onItemClick,
-            )
-            LibraryTab.VIDEOS -> VideosContent(
-                videos = state.videos,
-                viewMode = state.viewMode,
-                progress = state.progressByUri,
-                onItemClick = onItemClick,
-            )
+        val hasAnyItems = state.folders.isNotEmpty() || state.videos.isNotEmpty() || state.continueWatching.isNotEmpty()
+        when (libraryBodyState(hasPermission, state.isLoading, hasAnyItems)) {
+            LibraryBodyState.PERMISSION -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("Allow access to your videos", style = MaterialTheme.typography.bodyLarge)
+                    Button(onClick = { permissionLauncher.launch(readVideoPermission) }) { Text("Grant access") }
+                }
+            }
+            LibraryBodyState.LOADING -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
+            LibraryBodyState.EMPTY -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("No videos found", style = MaterialTheme.typography.bodyLarge)
+            }
+            LibraryBodyState.CONTENT -> {
+                if (state.continueWatching.isNotEmpty()) {
+                    ContinueWatchingRow(items = state.continueWatching, onItemClick = onItemClick)
+                }
+                TabRow(selectedTabIndex = state.tab.ordinal) {
+                    Tab(
+                        selected = state.tab == LibraryTab.FOLDERS,
+                        onClick = { viewModel.setTab(LibraryTab.FOLDERS) },
+                        text = { Text("Folders") },
+                    )
+                    Tab(
+                        selected = state.tab == LibraryTab.VIDEOS,
+                        onClick = { viewModel.setTab(LibraryTab.VIDEOS) },
+                        text = { Text("Videos") },
+                    )
+                }
+                when (state.tab) {
+                    LibraryTab.FOLDERS -> FoldersContent(
+                        folders = state.folders, viewMode = state.viewMode,
+                        progress = state.progressByUri, onItemClick = onItemClick,
+                    )
+                    LibraryTab.VIDEOS -> VideosContent(
+                        videos = state.videos, viewMode = state.viewMode,
+                        progress = state.progressByUri, onItemClick = onItemClick,
+                    )
+                }
+            }
         }
     }
 }
@@ -198,7 +204,7 @@ private fun LibraryTopBar(
         // Sort control
         Box {
             IconButton(onClick = { sortMenuExpanded = true }) {
-                Icon(Icons.Default.MoreVert, contentDescription = "Sort")
+                Icon(SortIcon, contentDescription = "Sort")
             }
             DropdownMenu(
                 expanded = sortMenuExpanded,
@@ -242,7 +248,7 @@ private fun LibraryTopBar(
         // List / Grid toggle
         IconButton(onClick = onToggleViewMode) {
             if (viewMode == ViewMode.LIST) {
-                Icon(Icons.Default.Menu, contentDescription = "Switch to grid view")
+                Icon(GridViewIcon, contentDescription = "Switch to grid view")
             } else {
                 Icon(Icons.AutoMirrored.Filled.List, contentDescription = "Switch to list view")
             }
@@ -401,7 +407,7 @@ private fun ThumbnailTile(
             if (bitmap != null) {
                 Image(
                     bitmap = bitmap.asImageBitmap(),
-                    contentDescription = null,
+                    contentDescription = item.displayName,
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop,
                 )
@@ -457,7 +463,7 @@ private fun MediaRow(
             if (bitmap != null) {
                 Image(
                     bitmap = bitmap.asImageBitmap(),
-                    contentDescription = null,
+                    contentDescription = mediaItem.displayName,
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop,
                 )
