@@ -34,7 +34,14 @@ class PlaybackMemoryRepository(
         } else {
             0L
         }
-        return ResolvedStartSettings(startPositionMs, speed, aspectMode, saved?.orientation)
+        return ResolvedStartSettings(
+            startPositionMs,
+            speed,
+            aspectMode,
+            saved?.orientation,
+            saved?.subtitleTrackId,
+            saved?.subtitleOffsetMs ?: 0L,
+        )
     }
 
     suspend fun persist(
@@ -43,6 +50,8 @@ class PlaybackMemoryRepository(
         durationMs: Long,
         speed: Float,
         aspectMode: String,
+        subtitleTrackId: String? = null,
+        subtitleOffsetMs: Long? = null,
         nowEpochMs: Long,
     ) {
         // Never record a blank/unloaded state (e.g. read after engine release) — it would
@@ -60,6 +69,8 @@ class PlaybackMemoryRepository(
                 durationMs = durationMs,
                 speed = speed,
                 aspectMode = aspectMode,
+                subtitleTrackId = subtitleTrackId,
+                subtitleOffsetMs = subtitleOffsetMs,
                 updatedAtEpochMs = nowEpochMs,
             ),
         )

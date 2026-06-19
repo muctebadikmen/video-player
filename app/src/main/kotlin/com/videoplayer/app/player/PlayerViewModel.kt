@@ -36,9 +36,14 @@ class PlayerViewModel(private val repo: PlaybackMemoryRepository) : ViewModel() 
         durationMs: Long,
         speed: Float,
         aspectMode: String,
+        subtitleTrackId: String? = null,
+        subtitleOffsetMs: Long? = null,
     ) {
         viewModelScope.launch {
-            repo.persist(mediaUri, positionMs, durationMs, speed, aspectMode, System.currentTimeMillis())
+            repo.persist(
+                mediaUri, positionMs, durationMs, speed, aspectMode,
+                subtitleTrackId, subtitleOffsetMs, System.currentTimeMillis(),
+            )
         }
     }
 

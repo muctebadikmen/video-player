@@ -7,4 +7,8 @@ data class ResolvedStartSettings(
     val aspectMode: String,
     /** Per-file orientation override (ActivityInfo.screenOrientation int), or null for no override. */
     val orientation: Int?,
+    /** Per-file subtitle memory token ("embedded:<id>" / "ext:<uri>" / null = none). */
+    val subtitleTrackId: String?,
+    /** Per-file custom-subtitle sync offset in ms (0 when none). */
+    val subtitleOffsetMs: Long,
 )

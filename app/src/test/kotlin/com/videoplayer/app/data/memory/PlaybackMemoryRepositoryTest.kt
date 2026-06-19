@@ -100,4 +100,25 @@ class PlaybackMemoryRepositoryTest {
         repo.persist("u", positionMs = 10_000, durationMs = 120_000, speed = 2f, aspectMode = "FILL", nowEpochMs = 2L)
         assertThat(repo.resolveStart("u").orientation).isEqualTo(6)
     }
+
+    @Test fun `persist then resolveStart restores subtitle track and offset`() = runTest {
+        repo.persist("u", positionMs = 10_000, durationMs = 120_000, speed = 1f, aspectMode = "FIT",
+            subtitleTrackId = "ext:content://x", subtitleOffsetMs = 150L, nowEpochMs = 1L)
+        val r = repo.resolveStart("u")
+        assertThat(r.subtitleTrackId).isEqualTo("ext:content://x")
+        assertThat(r.subtitleOffsetMs).isEqualTo(150L)
+    }
+
+    @Test fun `resolveStart defaults subtitle to null and zero offset when absent`() = runTest {
+        val r = repo.resolveStart("none")
+        assertThat(r.subtitleTrackId).isNull()
+        assertThat(r.subtitleOffsetMs).isEqualTo(0L)
+    }
+
+    @Test fun `persistOrientation preserves a saved subtitle`() = runTest {
+        repo.persist("u", positionMs = 10_000, durationMs = 120_000, speed = 1f, aspectMode = "FIT",
+            subtitleTrackId = "embedded:text:0:0", subtitleOffsetMs = 0L, nowEpochMs = 1L)
+        repo.persistOrientation("u", orientation = 6, nowEpochMs = 2L)
+        assertThat(repo.resolveStart("u").subtitleTrackId).isEqualTo("embedded:text:0:0")
+    }
 }
