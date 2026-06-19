@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 package com.videoplayer.core.playback
 
 /** A persisted playback position for one media item, as needed by the library's continue-watching row. */

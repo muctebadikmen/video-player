@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 package com.videoplayer.app.player.subtitle
 
 import android.content.ContentUris

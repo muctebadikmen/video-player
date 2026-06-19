@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 package com.videoplayer.app.library
 
 /** Which body the library should render, after permission + loading + content are known. */

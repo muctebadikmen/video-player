@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 package com.videoplayer.core.model
 
 import com.google.common.truth.Truth.assertThat

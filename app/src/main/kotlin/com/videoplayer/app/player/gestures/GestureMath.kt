@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 package com.videoplayer.app.player.gestures
 
 /** Volume can be boosted to 200% of system max (1.0 = system max). */

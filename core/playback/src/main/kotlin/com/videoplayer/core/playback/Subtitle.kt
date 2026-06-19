@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 package com.videoplayer.core.playback
 
 /** One subtitle cue: [text] is shown from [startMs] (inclusive) to [endMs] (exclusive). */

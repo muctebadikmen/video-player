@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 package com.videoplayer.core.playback
 
 import kotlinx.coroutines.flow.MutableStateFlow

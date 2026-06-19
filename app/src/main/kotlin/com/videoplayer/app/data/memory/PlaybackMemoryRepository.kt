@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 package com.videoplayer.app.data.memory
 
 import com.videoplayer.core.playback.effectiveResumePosition

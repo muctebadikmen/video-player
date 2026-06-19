@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 package com.videoplayer.app.settings
 
 import androidx.compose.foundation.layout.Arrangement

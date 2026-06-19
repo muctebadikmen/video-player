@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 package com.videoplayer.core.playback
 
 /** An A–B repeat loop. Both points must be set and ordered (end after start) to be active. */

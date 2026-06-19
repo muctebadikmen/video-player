@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 package com.videoplayer.app.player.gestures
 
 /** How the video frame fills the surface. Maps to a Media3 PlayerView resize mode in the UI. */

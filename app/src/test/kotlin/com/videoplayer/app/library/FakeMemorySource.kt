@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 package com.videoplayer.app.library
 
 import com.videoplayer.app.data.memory.MemorySource

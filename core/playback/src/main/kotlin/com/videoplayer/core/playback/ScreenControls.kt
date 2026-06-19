@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 package com.videoplayer.core.playback
 
 /** Screen orientation the player should request. Maps to an ActivityInfo orientation in the UI. */

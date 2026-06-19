@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 package com.videoplayer.app.data.memory
 
 /** The settings the player should apply when a file opens, after precedence + resume policy. */

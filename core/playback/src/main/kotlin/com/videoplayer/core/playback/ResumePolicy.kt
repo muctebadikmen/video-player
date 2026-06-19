@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
 package com.videoplayer.core.playback
 
 /** Minimum watched position worth resuming. Below this we start from the beginning. */
