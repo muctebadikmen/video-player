@@ -100,6 +100,21 @@ class PlaybackMemoryRepository(
     }
 
     /**
+     * Persists only the per-file aspect mode, leaving position/duration/speed/orientation/subtitle
+     * untouched. Like [persistOrientation] there is no `durationMs <= 0` guard — aspect is a valid
+     * standalone preference. Called immediately when the user cycles aspect so an interleaved
+     * orientation/subtitle write (which copies the existing row) can't re-save a stale aspect.
+     */
+    suspend fun persistAspect(mediaUri: String, aspectMode: String, nowEpochMs: Long) {
+        val existing = dao.getByUri(mediaUri)
+        val base = existing ?: PlaybackMemoryEntity(
+            mediaUri = mediaUri, positionMs = 0, durationMs = 0,
+            aspectMode = "FIT", speed = 1f, updatedAtEpochMs = 0L,
+        )
+        dao.upsert(base.copy(aspectMode = aspectMode, updatedAtEpochMs = nowEpochMs))
+    }
+
+    /**
      * Persists only the per-file orientation override, leaving position/duration/speed/aspect
      * untouched. Unlike [persist] there is no `durationMs <= 0` guard — orientation is a valid
      * standalone preference that can be set before any playback state exists.

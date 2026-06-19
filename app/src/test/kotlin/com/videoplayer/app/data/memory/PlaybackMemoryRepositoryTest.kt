@@ -132,4 +132,57 @@ class PlaybackMemoryRepositoryTest {
         assertThat(r.subtitleTrackId).isEqualTo("ext:content://x")
         assertThat(r.subtitleOffsetMs).isEqualTo(200L)
     }
+
+    // --- persistAspect: immediate per-file aspect persistence (mirrors persistOrientation) ---
+
+    @Test fun `persistAspect then resolveStart restores the saved aspect`() = runTest {
+        repo.persistAspect("u", aspectMode = "RATIO_4_3", nowEpochMs = 1L)
+        assertThat(repo.resolveStart("u").aspectMode).isEqualTo("RATIO_4_3")
+    }
+
+    @Test fun `persistAspect writes aspect and preserves position, speed, orientation, subtitle`() = runTest {
+        repo.persist("u", positionMs = 30_000, durationMs = 120_000, speed = 1.5f, aspectMode = "ZOOM", nowEpochMs = 1L)
+        repo.persistOrientation("u", orientation = 6, nowEpochMs = 2L)
+        repo.persistSubtitle("u", subtitleTrackId = "ext:content://x", subtitleOffsetMs = 150L, nowEpochMs = 3L)
+        repo.persistAspect("u", aspectMode = "RATIO_4_3", nowEpochMs = 4L)
+        val r = repo.resolveStart("u")
+        assertThat(r.aspectMode).isEqualTo("RATIO_4_3")
+        assertThat(r.startPositionMs).isEqualTo(30_000L)
+        assertThat(r.speed).isEqualTo(1.5f)
+        assertThat(r.orientation).isEqualTo(6)
+        assertThat(r.subtitleTrackId).isEqualTo("ext:content://x")
+        assertThat(r.subtitleOffsetMs).isEqualTo(150L)
+    }
+
+    // The exact device-regression clobber: change aspect (immediate persist), then change
+    // orientation (immediate persist) before any saveNow flush. The aspect must SURVIVE the
+    // interleaved orientation write.
+    @Test fun `persistAspect then persistOrientation preserves the aspect`() = runTest {
+        repo.persistAspect("u", aspectMode = "RATIO_4_3", nowEpochMs = 1L)
+        repo.persistOrientation("u", orientation = 0, nowEpochMs = 2L)
+        val r = repo.resolveStart("u")
+        assertThat(r.aspectMode).isEqualTo("RATIO_4_3")
+        assertThat(r.orientation).isEqualTo(0)
+    }
+
+    // The symmetric clobber guard: an interleaved subtitle write must not lose the aspect.
+    @Test fun `persistAspect then persistSubtitle preserves the aspect`() = runTest {
+        repo.persistAspect("u", aspectMode = "RATIO_4_3", nowEpochMs = 1L)
+        repo.persistSubtitle("u", subtitleTrackId = "ext:content://x", subtitleOffsetMs = 0L, nowEpochMs = 2L)
+        val r = repo.resolveStart("u")
+        assertThat(r.aspectMode).isEqualTo("RATIO_4_3")
+        assertThat(r.subtitleTrackId).isEqualTo("ext:content://x")
+    }
+
+    @Test fun `persistOrientation preserves a saved aspect`() = runTest {
+        repo.persistAspect("u", aspectMode = "RATIO_4_3", nowEpochMs = 1L)
+        repo.persistOrientation("u", orientation = 6, nowEpochMs = 2L)
+        assertThat(repo.resolveStart("u").aspectMode).isEqualTo("RATIO_4_3")
+    }
+
+    @Test fun `persistSubtitle preserves a saved aspect`() = runTest {
+        repo.persistAspect("u", aspectMode = "RATIO_4_3", nowEpochMs = 1L)
+        repo.persistSubtitle("u", subtitleTrackId = "ext:content://x", subtitleOffsetMs = 0L, nowEpochMs = 2L)
+        assertThat(repo.resolveStart("u").aspectMode).isEqualTo("RATIO_4_3")
+    }
 }

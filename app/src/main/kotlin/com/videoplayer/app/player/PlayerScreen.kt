@@ -615,6 +615,10 @@ fun PlayerScreen(
                 aspectLabel = aspectMode.displayLabel(),
                 onCycleAspect = {
                     aspectMode = nextAspectMode(aspectMode)
+                    // Persist immediately (like orientation/subtitle) so an interleaved
+                    // orientation/subtitle write can't re-save the previous aspect, and so the
+                    // choice survives even if the dispose-time saveNow() is a no-op (released engine).
+                    playerViewModel.persistAspect(currentItem.uri, aspectMode.name)
                     gestureLabel = aspectMode.displayLabel()
                     gestureSeq++
                     interactionTick++

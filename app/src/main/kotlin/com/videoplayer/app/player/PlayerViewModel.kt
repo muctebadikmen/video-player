@@ -60,6 +60,10 @@ class PlayerViewModel(private val repo: PlaybackMemoryRepository) : ViewModel() 
         viewModelScope.launch { repo.persistSubtitle(mediaUri, subtitleTrackId, subtitleOffsetMs, System.currentTimeMillis()) }
     }
 
+    fun persistAspect(mediaUri: String, aspectMode: String) {
+        viewModelScope.launch { repo.persistAspect(mediaUri, aspectMode, System.currentTimeMillis()) }
+    }
+
     fun persistOrientation(mediaUri: String, orientation: Int?) {
         viewModelScope.launch { repo.persistOrientation(mediaUri, orientation, System.currentTimeMillis()) }
     }
