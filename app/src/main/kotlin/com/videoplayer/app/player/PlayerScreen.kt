@@ -333,8 +333,13 @@ fun PlayerScreen(
                     selectedSubtitleUri = null
                     engine.selectEmbeddedTextTrack(sel.id)
                     subtitleRestored = true
+                } else if (state.textTracks.isNotEmpty()) {
+                    // Tracks have arrived but the remembered id is gone (unsupported/filtered out, or
+                    // the file's track layout changed). Stop waiting: leave subtitles Off and mark
+                    // restored so the persist effect un-gates instead of staying frozen all session.
+                    subtitleRestored = true
                 }
-                // else: track not present yet — wait for state.textTracks to update (effect re-runs).
+                // else: tracks not loaded yet — wait for state.textTracks to update (effect re-runs).
             }
         }
     }
