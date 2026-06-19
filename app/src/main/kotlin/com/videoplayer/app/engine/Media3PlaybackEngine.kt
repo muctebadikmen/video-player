@@ -280,7 +280,7 @@ class Media3PlaybackEngine(context: Context) : PlaybackEngine {
         val parsed = id?.let { parseTextTrackId(it) }
         val textGroups = latestTracks?.groups?.filter { it.type == C.TRACK_TYPE_TEXT }.orEmpty()
         val group = parsed?.first?.let { textGroups.getOrNull(it) }
-        if (id != null && parsed != null && group != null && parsed.second < group.length) {
+        if (parsed != null && group != null && parsed.second < group.length) {
             builder.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
                 .setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup, parsed.second))
         } else {
