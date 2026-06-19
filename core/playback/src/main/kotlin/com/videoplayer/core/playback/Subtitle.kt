@@ -102,3 +102,29 @@ fun findSiblingSubtitles(videoFileName: String, candidates: List<String>): List<
         candBase == base || candBase.startsWith("$base.")
     }
 }
+
+/** The active subtitle selection, decoded from a per-file memory token. */
+sealed interface SubtitleSelection {
+    data object Off : SubtitleSelection
+    data class Embedded(val id: String) : SubtitleSelection
+    data class External(val uri: String) : SubtitleSelection
+}
+
+/**
+ * Encode the active subtitle selection for per-file memory:
+ * `"embedded:<id>"`, `"ext:<uri>"`, or null when nothing is selected.
+ * Embedded takes precedence (the two paths are mutually exclusive at runtime).
+ */
+fun subtitleMemoryToken(embeddedTrackId: String?, externalUri: String?): String? = when {
+    embeddedTrackId != null -> "embedded:$embeddedTrackId"
+    externalUri != null -> "ext:$externalUri"
+    else -> null
+}
+
+/** Decode a memory token (see [subtitleMemoryToken]); unrecognized input => [SubtitleSelection.Off]. */
+fun parseSubtitleToken(token: String?): SubtitleSelection = when {
+    token == null || token == "off" -> SubtitleSelection.Off
+    token.startsWith("embedded:") -> SubtitleSelection.Embedded(token.removePrefix("embedded:"))
+    token.startsWith("ext:") -> SubtitleSelection.External(token.removePrefix("ext:"))
+    else -> SubtitleSelection.Off
+}

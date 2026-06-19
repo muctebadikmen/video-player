@@ -53,4 +53,20 @@ class SubtitleTest {
         assertThat(nudgeSubtitleOffset(600_000, 50)).isEqualTo(600_000)     // clamp max
         assertThat(nudgeSubtitleOffset(-600_000, -50)).isEqualTo(-600_000)  // clamp min
     }
+
+    @Test fun `subtitleMemoryToken encodes embedded, ext, and off`() {
+        assertThat(subtitleMemoryToken("text:0:1", null)).isEqualTo("embedded:text:0:1")
+        assertThat(subtitleMemoryToken(null, "content://x")).isEqualTo("ext:content://x")
+        assertThat(subtitleMemoryToken(null, null)).isNull()
+        // Embedded wins if both are somehow set (paths are mutually exclusive in practice).
+        assertThat(subtitleMemoryToken("text:0:1", "content://x")).isEqualTo("embedded:text:0:1")
+    }
+
+    @Test fun `parseSubtitleToken decodes tokens and treats junk as Off`() {
+        assertThat(parseSubtitleToken(null)).isEqualTo(SubtitleSelection.Off)
+        assertThat(parseSubtitleToken("off")).isEqualTo(SubtitleSelection.Off)
+        assertThat(parseSubtitleToken("embedded:text:0:1")).isEqualTo(SubtitleSelection.Embedded("text:0:1"))
+        assertThat(parseSubtitleToken("ext:content://x")).isEqualTo(SubtitleSelection.External("content://x"))
+        assertThat(parseSubtitleToken("garbage")).isEqualTo(SubtitleSelection.Off)
+    }
 }
