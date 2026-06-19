@@ -781,7 +781,7 @@ fun PlayerScreen(
             )
         }
 
-        if (showSearchSheet) {
+        if (showSearchSheet && !inPip) {
             SubtitleSearchSheet(
                 state = searchState,
                 onDownload = { result ->
