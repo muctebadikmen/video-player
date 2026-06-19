@@ -129,6 +129,9 @@ class Media3PlaybackEngine(context: Context) : PlaybackEngine {
                 it.copy(
                     currentMediaIndex = c.currentMediaItemIndex,
                     durationMs = c.duration.coerceAtLeast(0),
+                    // Clear stale text tracks from the previous item; onTracksChanged repopulates for the new item.
+                    textTracks = emptyList(),
+                    selectedTextTrackId = null,
                 )
             }
         }
