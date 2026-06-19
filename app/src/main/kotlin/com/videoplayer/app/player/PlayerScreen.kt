@@ -174,6 +174,9 @@ fun PlayerScreen(
         if (pipSupported) {
             val (n, d) = clampPipAspect(state.videoAspectRatio)
             pipController?.setAutoEnterPip(enabled = state.isPlaying, aspectNum = n, aspectDen = d)
+        } else {
+            // Setting OFF (or PiP unsupported): actively cancel any previously-registered auto-enter.
+            pipController?.setAutoEnterPip(enabled = false, aspectNum = 16, aspectDen = 9)
         }
     }
     // Entering PiP hides the controls; nothing should overlay the floating window.
