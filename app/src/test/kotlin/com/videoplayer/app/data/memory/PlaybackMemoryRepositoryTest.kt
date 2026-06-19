@@ -103,7 +103,7 @@ class PlaybackMemoryRepositoryTest {
     }
 
     @Test fun `persistSubtitle then resolveStart restores subtitle track and offset`() = runTest {
-        repo.persistSubtitle("u", subtitleTrackId = "ext:content://x", subtitleOffsetMs = 150L, nowEpochMs = 1L)
+        repo.persistSubtitle("u", subtitleTrackId = "ext:content://x", subtitleOffsetMs = 150L, subtitleRate = 1.0f, nowEpochMs = 1L)
         val r = repo.resolveStart("u")
         assertThat(r.subtitleTrackId).isEqualTo("ext:content://x")
         assertThat(r.subtitleOffsetMs).isEqualTo(150L)
@@ -117,7 +117,7 @@ class PlaybackMemoryRepositoryTest {
 
     @Test fun `persistSubtitle preserves saved position, speed, and aspect`() = runTest {
         repo.persist("u", positionMs = 30_000, durationMs = 120_000, speed = 1.5f, aspectMode = "ZOOM", nowEpochMs = 1L)
-        repo.persistSubtitle("u", subtitleTrackId = "embedded:text:0:0", subtitleOffsetMs = 0L, nowEpochMs = 2L)
+        repo.persistSubtitle("u", subtitleTrackId = "embedded:text:0:0", subtitleOffsetMs = 0L, subtitleRate = 1.0f, nowEpochMs = 2L)
         val r = repo.resolveStart("u")
         assertThat(r.subtitleTrackId).isEqualTo("embedded:text:0:0")
         assertThat(r.startPositionMs).isEqualTo(30_000L)
@@ -126,7 +126,7 @@ class PlaybackMemoryRepositoryTest {
     }
 
     @Test fun `persist preserves a saved subtitle`() = runTest {
-        repo.persistSubtitle("u", subtitleTrackId = "ext:content://x", subtitleOffsetMs = 200L, nowEpochMs = 1L)
+        repo.persistSubtitle("u", subtitleTrackId = "ext:content://x", subtitleOffsetMs = 200L, subtitleRate = 1.0f, nowEpochMs = 1L)
         repo.persist("u", positionMs = 10_000, durationMs = 120_000, speed = 2f, aspectMode = "FILL", nowEpochMs = 2L)
         val r = repo.resolveStart("u")
         assertThat(r.subtitleTrackId).isEqualTo("ext:content://x")
@@ -143,7 +143,7 @@ class PlaybackMemoryRepositoryTest {
     @Test fun `persistAspect writes aspect and preserves position, speed, orientation, subtitle`() = runTest {
         repo.persist("u", positionMs = 30_000, durationMs = 120_000, speed = 1.5f, aspectMode = "ZOOM", nowEpochMs = 1L)
         repo.persistOrientation("u", orientation = 6, nowEpochMs = 2L)
-        repo.persistSubtitle("u", subtitleTrackId = "ext:content://x", subtitleOffsetMs = 150L, nowEpochMs = 3L)
+        repo.persistSubtitle("u", subtitleTrackId = "ext:content://x", subtitleOffsetMs = 150L, subtitleRate = 1.0f, nowEpochMs = 3L)
         repo.persistAspect("u", aspectMode = "RATIO_4_3", nowEpochMs = 4L)
         val r = repo.resolveStart("u")
         assertThat(r.aspectMode).isEqualTo("RATIO_4_3")
@@ -168,7 +168,7 @@ class PlaybackMemoryRepositoryTest {
     // The symmetric clobber guard: an interleaved subtitle write must not lose the aspect.
     @Test fun `persistAspect then persistSubtitle preserves the aspect`() = runTest {
         repo.persistAspect("u", aspectMode = "RATIO_4_3", nowEpochMs = 1L)
-        repo.persistSubtitle("u", subtitleTrackId = "ext:content://x", subtitleOffsetMs = 0L, nowEpochMs = 2L)
+        repo.persistSubtitle("u", subtitleTrackId = "ext:content://x", subtitleOffsetMs = 0L, subtitleRate = 1.0f, nowEpochMs = 2L)
         val r = repo.resolveStart("u")
         assertThat(r.aspectMode).isEqualTo("RATIO_4_3")
         assertThat(r.subtitleTrackId).isEqualTo("ext:content://x")
@@ -182,7 +182,53 @@ class PlaybackMemoryRepositoryTest {
 
     @Test fun `persistSubtitle preserves a saved aspect`() = runTest {
         repo.persistAspect("u", aspectMode = "RATIO_4_3", nowEpochMs = 1L)
-        repo.persistSubtitle("u", subtitleTrackId = "ext:content://x", subtitleOffsetMs = 0L, nowEpochMs = 2L)
+        repo.persistSubtitle("u", subtitleTrackId = "ext:content://x", subtitleOffsetMs = 0L, subtitleRate = 1.0f, nowEpochMs = 2L)
         assertThat(repo.resolveStart("u").aspectMode).isEqualTo("RATIO_4_3")
+    }
+
+    // --- subtitleRate persistence tests (v1.2.0, DB v2) ---
+
+    @Test fun `persistSubtitle then resolveStart restores subtitle rate`() = runTest {
+        repo.persistSubtitle("u", subtitleTrackId = "ext:content://x", subtitleOffsetMs = 150L,
+            subtitleRate = 1.04f, nowEpochMs = 1L)
+        val r = repo.resolveStart("u")
+        assertThat(r.subtitleRate).isEqualTo(1.04f)
+        assertThat(r.subtitleOffsetMs).isEqualTo(150L)
+    }
+
+    @Test fun `resolveStart defaults subtitle rate to one when absent`() = runTest {
+        assertThat(repo.resolveStart("none").subtitleRate).isEqualTo(1.0f)
+    }
+
+    @Test fun `persistSubtitle preserves saved position, speed, aspect alongside rate`() = runTest {
+        repo.persist("u", positionMs = 30_000, durationMs = 120_000, speed = 1.5f, aspectMode = "ZOOM", nowEpochMs = 1L)
+        repo.persistSubtitle("u", subtitleTrackId = "ext:content://x", subtitleOffsetMs = 0L,
+            subtitleRate = 0.96f, nowEpochMs = 2L)
+        val r = repo.resolveStart("u")
+        assertThat(r.subtitleRate).isEqualTo(0.96f)
+        assertThat(r.startPositionMs).isEqualTo(30_000L)
+        assertThat(r.speed).isEqualTo(1.5f)
+        assertThat(r.aspectMode).isEqualTo("ZOOM")
+    }
+
+    @Test fun `persist preserves a saved subtitle rate`() = runTest {
+        repo.persistSubtitle("u", subtitleTrackId = "ext:content://x", subtitleOffsetMs = 200L,
+            subtitleRate = 1.10f, nowEpochMs = 1L)
+        repo.persist("u", positionMs = 10_000, durationMs = 120_000, speed = 2f, aspectMode = "FILL", nowEpochMs = 2L)
+        assertThat(repo.resolveStart("u").subtitleRate).isEqualTo(1.10f)
+    }
+
+    @Test fun `persistOrientation preserves a saved subtitle rate`() = runTest {
+        repo.persistSubtitle("u", subtitleTrackId = "ext:content://x", subtitleOffsetMs = 0L,
+            subtitleRate = 1.25f, nowEpochMs = 1L)
+        repo.persistOrientation("u", orientation = 6, nowEpochMs = 2L)
+        assertThat(repo.resolveStart("u").subtitleRate).isEqualTo(1.25f)
+    }
+
+    @Test fun `persistAspect preserves a saved subtitle rate`() = runTest {
+        repo.persistSubtitle("u", subtitleTrackId = "ext:content://x", subtitleOffsetMs = 0L,
+            subtitleRate = 0.90f, nowEpochMs = 1L)
+        repo.persistAspect("u", aspectMode = "RATIO_4_3", nowEpochMs = 2L)
+        assertThat(repo.resolveStart("u").subtitleRate).isEqualTo(0.90f)
     }
 }

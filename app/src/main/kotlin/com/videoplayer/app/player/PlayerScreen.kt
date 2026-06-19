@@ -353,7 +353,7 @@ fun PlayerScreen(
         if (!subtitleRestored) return@LaunchedEffect
         val r = resolved
         if (subtitleToken != r?.subtitleTrackId || subtitleOffsetMs != (r?.subtitleOffsetMs ?: 0L)) {
-            playerViewModel.persistSubtitle(currentItem.uri, subtitleToken, subtitleOffsetMs)
+            playerViewModel.persistSubtitle(currentItem.uri, subtitleToken, subtitleOffsetMs, subtitleRate = 1.0f)
         }
     }
 

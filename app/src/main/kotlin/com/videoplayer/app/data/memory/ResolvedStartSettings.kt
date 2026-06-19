@@ -18,4 +18,6 @@ data class ResolvedStartSettings(
     val subtitleTrackId: String?,
     /** Per-file custom-subtitle sync offset in ms (0 when none). */
     val subtitleOffsetMs: Long,
+    /** Per-file external-subtitle rate correction (1.0 = unscaled). */
+    val subtitleRate: Float,
 )

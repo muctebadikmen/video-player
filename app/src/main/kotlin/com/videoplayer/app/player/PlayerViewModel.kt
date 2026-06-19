@@ -56,8 +56,8 @@ class PlayerViewModel(private val repo: PlaybackMemoryRepository) : ViewModel() 
         }
     }
 
-    fun persistSubtitle(mediaUri: String, subtitleTrackId: String?, subtitleOffsetMs: Long?) {
-        viewModelScope.launch { repo.persistSubtitle(mediaUri, subtitleTrackId, subtitleOffsetMs, System.currentTimeMillis()) }
+    fun persistSubtitle(mediaUri: String, subtitleTrackId: String?, subtitleOffsetMs: Long?, subtitleRate: Float) {
+        viewModelScope.launch { repo.persistSubtitle(mediaUri, subtitleTrackId, subtitleOffsetMs, subtitleRate, System.currentTimeMillis()) }
     }
 
     fun persistAspect(mediaUri: String, aspectMode: String) {

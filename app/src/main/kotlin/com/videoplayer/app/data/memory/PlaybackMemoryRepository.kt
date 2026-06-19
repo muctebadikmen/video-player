@@ -43,6 +43,7 @@ class PlaybackMemoryRepository(
             saved?.orientation,
             saved?.subtitleTrackId,
             saved?.subtitleOffsetMs ?: 0L,
+            saved?.subtitleRate ?: 1.0f,
         )
     }
 
@@ -83,6 +84,7 @@ class PlaybackMemoryRepository(
         mediaUri: String,
         subtitleTrackId: String?,
         subtitleOffsetMs: Long?,
+        subtitleRate: Float,
         nowEpochMs: Long,
     ) {
         val existing = dao.getByUri(mediaUri)
@@ -94,6 +96,7 @@ class PlaybackMemoryRepository(
             base.copy(
                 subtitleTrackId = subtitleTrackId,
                 subtitleOffsetMs = subtitleOffsetMs,
+                subtitleRate = subtitleRate,
                 updatedAtEpochMs = nowEpochMs,
             ),
         )
