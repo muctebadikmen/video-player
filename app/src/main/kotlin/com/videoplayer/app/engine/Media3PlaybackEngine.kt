@@ -8,6 +8,8 @@ import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
+import androidx.media3.common.TrackSelectionOverride
+import androidx.media3.common.Tracks
 import androidx.media3.common.VideoSize
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaController
@@ -23,6 +25,7 @@ import com.videoplayer.core.playback.EngineType
 import com.videoplayer.core.playback.PlaybackEngine
 import com.videoplayer.core.playback.PlaybackState
 import com.videoplayer.core.playback.PlayerStatus
+import com.videoplayer.core.playback.TextTrackInfo
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -58,6 +61,18 @@ fun exoStateToStatus(playbackState: Int): PlayerStatus = when (playbackState) {
 fun videoAspectRatio(width: Int, height: Int, pixelWidthHeightRatio: Float): Float =
     if (width == 0 || height == 0) 0f else width * pixelWidthHeightRatio / height
 
+/** Stable id for an embedded text track: its index among text track-groups and the track index within that group. */
+fun textTrackId(groupIndex: Int, trackIndex: Int): String = "text:$groupIndex:$trackIndex"
+
+/** Parse a [textTrackId] back to (groupIndex, trackIndex); null if malformed. */
+fun parseTextTrackId(id: String): Pair<Int, Int>? {
+    val parts = id.split(':')
+    if (parts.size != 3 || parts[0] != "text") return null
+    val g = parts[1].toIntOrNull() ?: return null
+    val t = parts[2].toIntOrNull() ?: return null
+    return g to t
+}
+
 /**
  * Media3 implementation of [PlaybackEngine].
  *
@@ -87,6 +102,7 @@ class Media3PlaybackEngine(context: Context) : PlaybackEngine {
     private val pending = mutableListOf<(MediaController) -> Unit>()
     private var attachedView: PlayerView? = null
     private var released = false
+    private var latestTracks: Tracks? = null
 
     /** Service player's audio session id, used to attach a LoudnessEnhancer for >100% volume. */
     val audioSessionId: Int get() = _state.value.audioSessionId
@@ -125,6 +141,8 @@ class Media3PlaybackEngine(context: Context) : PlaybackEngine {
             )
             _state.update { it.copy(videoAspectRatio = ratio) }
         }
+
+        override fun onTracksChanged(tracks: Tracks) = applyTracks(tracks)
     }
 
     init {
@@ -145,6 +163,7 @@ class Media3PlaybackEngine(context: Context) : PlaybackEngine {
             c.addListener(listener)
             attachedView?.player = c
             seedStateFromController(c)
+            applyTracks(c.currentTracks)
             val queued = pending.toList()
             pending.clear()
             queued.forEach { it(c) }
@@ -164,6 +183,27 @@ class Media3PlaybackEngine(context: Context) : PlaybackEngine {
                 currentMediaIndex = c.currentMediaItemIndex,
             )
         }
+    }
+
+    /** Derive [PlaybackState.textTracks] + [PlaybackState.selectedTextTrackId] from [tracks]. */
+    private fun applyTracks(tracks: Tracks) {
+        latestTracks = tracks
+        val infos = mutableListOf<TextTrackInfo>()
+        var selectedId: String? = null
+        var textGroupIndex = 0
+        for (group in tracks.groups) {
+            if (group.type != C.TRACK_TYPE_TEXT) continue
+            for (t in 0 until group.length) {
+                if (!group.isTrackSupported(t)) continue
+                val format = group.getTrackFormat(t)
+                val id = textTrackId(textGroupIndex, t)
+                val label = format.label ?: format.language ?: "Track ${infos.size + 1}"
+                infos.add(TextTrackInfo(id = id, label = label, language = format.language))
+                if (group.isTrackSelected(t)) selectedId = id
+            }
+            textGroupIndex++
+        }
+        _state.update { it.copy(textTracks = infos, selectedTextTrackId = selectedId) }
     }
 
     /** Run [block] on the controller now, or queue it to replay once connected. */
@@ -232,6 +272,24 @@ class Media3PlaybackEngine(context: Context) : PlaybackEngine {
     override fun setSpeed(speed: Float) = withController { c ->
         c.setPlaybackParameters(PlaybackParameters(speed))
         _state.update { it.copy(speed = speed) }
+    }
+
+    override fun selectEmbeddedTextTrack(id: String?) = withController { c ->
+        val builder = c.trackSelectionParameters.buildUpon()
+            .clearOverridesOfType(C.TRACK_TYPE_TEXT)
+        val parsed = id?.let { parseTextTrackId(it) }
+        val textGroups = latestTracks?.groups?.filter { it.type == C.TRACK_TYPE_TEXT }.orEmpty()
+        val group = parsed?.first?.let { textGroups.getOrNull(it) }
+        if (id != null && parsed != null && group != null && parsed.second < group.length) {
+            builder.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                .setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup, parsed.second))
+        } else {
+            // null id (disable) or unknown/stale id: turn embedded text off.
+            builder.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+        }
+        c.trackSelectionParameters = builder.build()
+        // Optimistic reflect; onTracksChanged refines selectedTextTrackId after selection settles.
+        _state.update { it.copy(selectedTextTrackId = if (group != null && parsed != null) id else null) }
     }
 
     /** Stop + clear the service player. Used when exiting the player to the library. */
