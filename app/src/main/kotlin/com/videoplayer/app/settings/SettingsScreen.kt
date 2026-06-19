@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package com.videoplayer.app.settings
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -28,6 +29,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 fun SettingsScreen(onBack: () -> Unit) {
     val vm: SettingsViewModel = viewModel(factory = SettingsViewModel.factory(LocalContext.current))
     val backgroundEnabled by vm.backgroundPlaybackEnabled.collectAsStateWithLifecycle()
+
+    BackHandler { onBack() }
 
     Scaffold { innerPadding ->
         Column(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
