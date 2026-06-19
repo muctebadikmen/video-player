@@ -116,7 +116,12 @@ class OpenSubtitlesClient(
                 .get()
                 .build()
             httpClient.newCall(fileReq).execute().use { dl ->
-                if (!dl.isSuccessful) return@execute OsResult.Failure(OsError.Http(dl.code, dl.message))
+                // The /download POST already succeeded and SPENT the user's quota; a failure fetching the
+                // CDN link must NOT be retriable (that would re-POST and double-spend). Map to a
+                // non-retriable error so execute() returns instead of re-running the whole block.
+                if (!dl.isSuccessful) {
+                    return@execute OsResult.Failure(OsError.Unexpected("subtitle download failed (${dl.code})"))
+                }
                 OsResult.Success(DownloadInfo(dl.body?.bytes() ?: ByteArray(0), link.remaining))
             }
         }

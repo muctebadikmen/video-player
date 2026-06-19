@@ -108,4 +108,18 @@ class OpenSubtitlesClientTest {
         val result = client.search("KEY", "tok", moviehash = null, query = "x", languages = listOf("en"))
         assertThat(result).isEqualTo(OsResult.Failure(OsError.Http(403, "forbidden")))
     }
+
+    @Test fun `a failed file download does not retry the quota-spending POST`() = runTest {
+        // POST /download succeeds (quota spent), then the CDN file GET 500s.
+        server.enqueue(
+            MockResponse().setResponseCode(200).setBody(
+                """{"link":"${server.url("/dl/file.srt")}","remaining":9}""",
+            ),
+        )
+        server.enqueue(MockResponse().setResponseCode(500)) // CDN file fetch fails
+        val result = client.download("KEY", "tok", fileId = 555)
+        assertThat(result).isInstanceOf(OsResult.Failure::class.java)
+        // Exactly 2 requests total (one POST + one GET) — NOT 4 (no re-POST of /download).
+        assertThat(server.requestCount).isEqualTo(2)
+    }
 }
