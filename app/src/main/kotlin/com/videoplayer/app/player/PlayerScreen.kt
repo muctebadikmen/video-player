@@ -4,9 +4,12 @@ import android.Manifest
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
+import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
+import android.provider.OpenableColumns
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -25,6 +28,8 @@ import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
@@ -59,6 +64,10 @@ import com.videoplayer.app.data.memory.SettingsRepository
 import com.videoplayer.app.data.memory.settingsDataStore
 import com.videoplayer.app.engine.Media3PlaybackEngine
 import com.videoplayer.app.player.controls.DoubleTapAction
+import com.videoplayer.app.player.subtitle.CueOverlay
+import com.videoplayer.app.player.subtitle.SiblingSubtitleScanner
+import com.videoplayer.app.player.subtitle.SubtitleLoader
+import com.videoplayer.app.player.subtitle.SubtitleOption
 import com.videoplayer.app.player.controls.SKIP_MS
 import com.videoplayer.app.player.controls.doubleTapAction
 import com.videoplayer.app.player.controls.resolveTapZone
@@ -76,6 +85,9 @@ import com.videoplayer.core.model.MediaItem
 import com.videoplayer.core.model.formatDuration
 import com.videoplayer.core.playback.AbLoop
 import com.videoplayer.core.playback.FRAME_STEP_MS
+import com.videoplayer.core.playback.SubtitleCue
+import com.videoplayer.core.playback.activeCueText
+import com.videoplayer.core.playback.nudgeSubtitleOffset
 import com.videoplayer.core.playback.LOCK_HINT_VISIBLE_MS
 import com.videoplayer.core.playback.OrientationMode
 import com.videoplayer.core.playback.PlayerStatus
@@ -185,6 +197,16 @@ fun PlayerScreen(
     // A-B repeat state (resets when the media item changes)
     var abLoop by remember(currentItem.uri) { mutableStateOf(AbLoop()) }
 
+    // Subtitle state (re-keyed on currentItem.uri so a new file starts with no subtitle)
+    var siblingSubtitles by remember(currentItem.uri) { mutableStateOf<List<SubtitleOption>>(emptyList()) }
+    var externalSubtitles by remember(currentItem.uri) { mutableStateOf<List<SubtitleOption>>(emptyList()) }
+    var selectedSubtitleUri by remember(currentItem.uri) { mutableStateOf<String?>(null) }
+    var subtitleOffsetMs by remember(currentItem.uri) { mutableStateOf(0L) }
+    var subtitleCues by remember { mutableStateOf<List<SubtitleCue>>(emptyList()) }
+    val subtitleOptions = remember(siblingSubtitles, externalSubtitles) {
+        (siblingSubtitles + externalSubtitles).distinctBy { it.uri }
+    }
+
     // Sleep timer state
     var sleepDeadlineMs by remember { mutableStateOf<Long?>(null) }
     var sleepAtEndOfVideo by remember { mutableStateOf(false) }
@@ -197,6 +219,25 @@ fun PlayerScreen(
     val notifLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { /* ignored: playback works without it */ }
+
+    // SAF subtitle file picker: takes a persistable read permission so the chosen subtitle
+    // survives app restarts without re-prompting (G-4 will restore it from memory).
+    val subtitlePicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri: Uri? ->
+        if (uri != null) {
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                )
+            }
+            val name = subtitleDisplayName(context, uri) ?: uri.lastPathSegment ?: "Subtitle"
+            val option = SubtitleOption(uri.toString(), name)
+            externalSubtitles = (externalSubtitles + option).distinctBy { it.uri }
+            selectedSubtitleUri = option.uri
+        }
+    }
     LaunchedEffect(Unit) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS)
@@ -227,6 +268,22 @@ fun PlayerScreen(
     LaunchedEffect(currentItem.uri) {
         playerViewModel.load(currentItem.uri)
     }
+
+    // Sibling scan: best-effort discovery of same-folder subtitle files via MediaStore.
+    LaunchedEffect(currentItem.uri) {
+        siblingSubtitles = SiblingSubtitleScanner.scan(
+            context = context,
+            videoFolderName = currentItem.folderPath.substringAfterLast('/'),
+            videoFileName = currentItem.displayName,
+        )
+    }
+
+    // Cue load: parse the selected subtitle file whenever the selection changes.
+    LaunchedEffect(selectedSubtitleUri) {
+        val uri = selectedSubtitleUri
+        subtitleCues = if (uri == null) emptyList() else SubtitleLoader.load(context, uri)
+    }
+
     LaunchedEffect(engine) {
         engine.setMediaPlaylist(playlist.map { it.uri }, startIndex)
     }
@@ -544,12 +601,28 @@ fun PlayerScreen(
                     pipController?.enterPip(n, d)
                     interactionTick++
                 },
+                subtitleOptions = subtitleOptions,
+                selectedSubtitleUri = selectedSubtitleUri,
+                subtitleOffsetMs = subtitleOffsetMs,
+                onSelectSubtitle = { selectedSubtitleUri = it },
+                onLoadSubtitleFile = { subtitlePicker.launch(arrayOf("*/*")) },
+                onNudgeSubtitle = { delta -> subtitleOffsetMs = nudgeSubtitleOffset(subtitleOffsetMs, delta) },
             )
         }
 
         if (!inPip) {
             gestureLabel?.let { GestureOverlay(label = it) }
             if (speedBoostActive) GestureOverlay(label = "${BOOST_SPEED.toInt()}×")
+        }
+
+        if (!inPip) {
+            CueOverlay(
+                text = activeCueText(subtitleCues, state.positionMs, subtitleOffsetMs),
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .navigationBarsPadding()
+                    .padding(start = 24.dp, end = 24.dp, bottom = 72.dp),
+            )
         }
 
         if (locked && !inPip) {
@@ -618,6 +691,13 @@ fun PlayerScreen(
         }
     }
 }
+
+/** Queries the display name for a SAF [Uri] via [OpenableColumns]. Returns null on any failure. */
+private fun subtitleDisplayName(context: android.content.Context, uri: Uri): String? =
+    runCatching {
+        context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)
+            ?.use { c -> if (c.moveToFirst()) c.getString(0) else null }
+    }.getOrNull()
 
 /** Unwraps an [Activity] from a (possibly wrapped) Compose [Context]. */
 private fun Context.findActivity(): Activity? {

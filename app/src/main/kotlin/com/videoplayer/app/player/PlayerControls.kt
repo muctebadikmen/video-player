@@ -16,10 +16,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -37,10 +39,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import com.videoplayer.app.player.subtitle.SubtitleOption
 import com.videoplayer.core.model.formatDuration
 import com.videoplayer.core.playback.AbLoop
 import com.videoplayer.core.playback.PlaybackState
 import com.videoplayer.core.playback.SPEED_PRESETS
+import com.videoplayer.core.playback.SUBTITLE_NUDGE_MS
 
 /**
  * Custom playback control overlay rendered on top of the video surface. Renders
@@ -67,10 +71,17 @@ fun PlayerControls(
     onCycleOrientation: () -> Unit,
     pipSupported: Boolean,
     onEnterPip: () -> Unit,
+    subtitleOptions: List<SubtitleOption>,
+    selectedSubtitleUri: String?,
+    subtitleOffsetMs: Long,
+    onSelectSubtitle: (String?) -> Unit,
+    onLoadSubtitleFile: () -> Unit,
+    onNudgeSubtitle: (Long) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var speedMenuExpanded by remember { mutableStateOf(false) }
     var sleepMenuExpanded by remember { mutableStateOf(false) }
+    var subtitleMenuExpanded by remember { mutableStateOf(false) }
 
     Box(
         modifier = modifier
@@ -196,6 +207,69 @@ fun PlayerControls(
                 }
                 TextButton(onClick = onToggleAb) {
                     Text(abLabel, color = Color.White)
+                }
+
+                // CC subtitle picker
+                Box {
+                    TextButton(onClick = { subtitleMenuExpanded = true }) {
+                        Text(
+                            text = "CC",
+                            color = if (selectedSubtitleUri != null) MaterialTheme.colorScheme.primary else Color.White,
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = subtitleMenuExpanded,
+                        onDismissRequest = { subtitleMenuExpanded = false },
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Off") },
+                            onClick = {
+                                onSelectSubtitle(null)
+                                subtitleMenuExpanded = false
+                            },
+                            trailingIcon = {
+                                if (selectedSubtitleUri == null) Icon(Icons.Filled.Check, contentDescription = null)
+                            },
+                        )
+                        subtitleOptions.forEach { option ->
+                            DropdownMenuItem(
+                                text = { Text(option.label) },
+                                onClick = {
+                                    onSelectSubtitle(option.uri)
+                                    subtitleMenuExpanded = false
+                                },
+                                trailingIcon = {
+                                    if (selectedSubtitleUri == option.uri) Icon(Icons.Filled.Check, contentDescription = null)
+                                },
+                            )
+                        }
+                        HorizontalDivider()
+                        DropdownMenuItem(
+                            text = { Text("Load subtitle file…") },
+                            onClick = {
+                                onLoadSubtitleFile()
+                                subtitleMenuExpanded = false
+                            },
+                        )
+                        // Sync nudge — only meaningful while a custom subtitle is active. Items keep the
+                        // menu open so the user can tap repeatedly; the offset readout updates live.
+                        if (selectedSubtitleUri != null) {
+                            HorizontalDivider()
+                            DropdownMenuItem(
+                                text = { Text("Sync −50ms (delay)") },
+                                onClick = { onNudgeSubtitle(-SUBTITLE_NUDGE_MS) },
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Offset: ${subtitleOffsetMs} ms") },
+                                onClick = {},
+                                enabled = false,
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Sync +50ms (earlier)") },
+                                onClick = { onNudgeSubtitle(SUBTITLE_NUDGE_MS) },
+                            )
+                        }
+                    }
                 }
 
                 // Sleep timer
