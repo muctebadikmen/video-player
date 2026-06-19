@@ -50,8 +50,6 @@ class PlaybackMemoryRepository(
         durationMs: Long,
         speed: Float,
         aspectMode: String,
-        subtitleTrackId: String? = null,
-        subtitleOffsetMs: Long? = null,
         nowEpochMs: Long,
     ) {
         // Never record a blank/unloaded state (e.g. read after engine release) — it would
@@ -69,6 +67,29 @@ class PlaybackMemoryRepository(
                 durationMs = durationMs,
                 speed = speed,
                 aspectMode = aspectMode,
+                updatedAtEpochMs = nowEpochMs,
+            ),
+        )
+    }
+
+    /**
+     * Persists only the per-file subtitle selection and offset, leaving all other fields
+     * untouched. Like [persistOrientation], there is no `durationMs <= 0` guard — subtitle
+     * is a valid standalone preference that can be set before any playback state exists.
+     */
+    suspend fun persistSubtitle(
+        mediaUri: String,
+        subtitleTrackId: String?,
+        subtitleOffsetMs: Long?,
+        nowEpochMs: Long,
+    ) {
+        val existing = dao.getByUri(mediaUri)
+        val base = existing ?: PlaybackMemoryEntity(
+            mediaUri = mediaUri, positionMs = 0, durationMs = 0,
+            aspectMode = "FIT", speed = 1f, updatedAtEpochMs = 0L,
+        )
+        dao.upsert(
+            base.copy(
                 subtitleTrackId = subtitleTrackId,
                 subtitleOffsetMs = subtitleOffsetMs,
                 updatedAtEpochMs = nowEpochMs,

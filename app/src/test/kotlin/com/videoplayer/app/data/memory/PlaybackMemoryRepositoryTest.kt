@@ -101,9 +101,8 @@ class PlaybackMemoryRepositoryTest {
         assertThat(repo.resolveStart("u").orientation).isEqualTo(6)
     }
 
-    @Test fun `persist then resolveStart restores subtitle track and offset`() = runTest {
-        repo.persist("u", positionMs = 10_000, durationMs = 120_000, speed = 1f, aspectMode = "FIT",
-            subtitleTrackId = "ext:content://x", subtitleOffsetMs = 150L, nowEpochMs = 1L)
+    @Test fun `persistSubtitle then resolveStart restores subtitle track and offset`() = runTest {
+        repo.persistSubtitle("u", subtitleTrackId = "ext:content://x", subtitleOffsetMs = 150L, nowEpochMs = 1L)
         val r = repo.resolveStart("u")
         assertThat(r.subtitleTrackId).isEqualTo("ext:content://x")
         assertThat(r.subtitleOffsetMs).isEqualTo(150L)
@@ -115,10 +114,21 @@ class PlaybackMemoryRepositoryTest {
         assertThat(r.subtitleOffsetMs).isEqualTo(0L)
     }
 
-    @Test fun `persistOrientation preserves a saved subtitle`() = runTest {
-        repo.persist("u", positionMs = 10_000, durationMs = 120_000, speed = 1f, aspectMode = "FIT",
-            subtitleTrackId = "embedded:text:0:0", subtitleOffsetMs = 0L, nowEpochMs = 1L)
-        repo.persistOrientation("u", orientation = 6, nowEpochMs = 2L)
-        assertThat(repo.resolveStart("u").subtitleTrackId).isEqualTo("embedded:text:0:0")
+    @Test fun `persistSubtitle preserves saved position, speed, and aspect`() = runTest {
+        repo.persist("u", positionMs = 30_000, durationMs = 120_000, speed = 1.5f, aspectMode = "ZOOM", nowEpochMs = 1L)
+        repo.persistSubtitle("u", subtitleTrackId = "embedded:text:0:0", subtitleOffsetMs = 0L, nowEpochMs = 2L)
+        val r = repo.resolveStart("u")
+        assertThat(r.subtitleTrackId).isEqualTo("embedded:text:0:0")
+        assertThat(r.startPositionMs).isEqualTo(30_000L)
+        assertThat(r.speed).isEqualTo(1.5f)
+        assertThat(r.aspectMode).isEqualTo("ZOOM")
+    }
+
+    @Test fun `persist preserves a saved subtitle`() = runTest {
+        repo.persistSubtitle("u", subtitleTrackId = "ext:content://x", subtitleOffsetMs = 200L, nowEpochMs = 1L)
+        repo.persist("u", positionMs = 10_000, durationMs = 120_000, speed = 2f, aspectMode = "FILL", nowEpochMs = 2L)
+        val r = repo.resolveStart("u")
+        assertThat(r.subtitleTrackId).isEqualTo("ext:content://x")
+        assertThat(r.subtitleOffsetMs).isEqualTo(200L)
     }
 }

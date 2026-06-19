@@ -212,6 +212,7 @@ fun PlayerScreen(
     val subtitleOptions = remember(siblingSubtitles, externalSubtitles) {
         (siblingSubtitles + externalSubtitles).distinctBy { it.uri }
     }
+    val subtitleToken = subtitleMemoryToken(state.selectedTextTrackId, selectedSubtitleUri)
 
     // Sleep timer state
     var sleepDeadlineMs by remember { mutableStateOf<Long?>(null) }
@@ -320,6 +321,17 @@ fun PlayerScreen(
         }
     }
 
+    // Persist a subtitle change immediately (so it survives even if the user pauses and exits
+    // before any periodic save). Mirrors persistOrientation. Skips the no-op fire right after
+    // restore by comparing against the saved (resolved) value.
+    LaunchedEffect(subtitleToken, subtitleOffsetMs, subtitleRestored, currentItem.uri) {
+        if (!subtitleRestored) return@LaunchedEffect
+        val r = resolved
+        if (subtitleToken != r?.subtitleTrackId || subtitleOffsetMs != (r?.subtitleOffsetMs ?: 0L)) {
+            playerViewModel.persistSubtitle(currentItem.uri, subtitleToken, subtitleOffsetMs)
+        }
+    }
+
     // Cue load: parse the selected subtitle file whenever the selection changes.
     LaunchedEffect(selectedSubtitleUri) {
         val uri = selectedSubtitleUri
@@ -394,12 +406,6 @@ fun PlayerScreen(
     val latestBoost by rememberUpdatedState(speedBoostActive)
     val latestCurrentUri by rememberUpdatedState(currentItem.uri)
     val latestBackgroundEnabled by rememberUpdatedState(backgroundEnabled)
-    val subtitleToken = subtitleMemoryToken(state.selectedTextTrackId, selectedSubtitleUri)
-    val latestSubtitleToken by rememberUpdatedState(subtitleToken)
-    val latestSubtitleOffset by rememberUpdatedState(subtitleOffsetMs)
-    val latestSubtitleRestored by rememberUpdatedState(subtitleRestored)
-    val latestResolvedToken by rememberUpdatedState(resolved?.subtitleTrackId)
-    val latestResolvedOffset by rememberUpdatedState(resolved?.subtitleOffsetMs ?: 0L)
 
     // Save current state: periodically while playing, and on STOP / dispose.
     // Reads the last *composed* values rather than engine.state.value, because
@@ -410,16 +416,12 @@ fun PlayerScreen(
         if (!resumeApplied) return
         if (latestDurationMs <= 0L) return
         val speedToSave = if (latestBoost) 1f else latestSpeed
-        val subTokenToSave = if (latestSubtitleRestored) latestSubtitleToken else latestResolvedToken
-        val subOffsetToSave = if (latestSubtitleRestored) latestSubtitleOffset else latestResolvedOffset
         playerViewModel.persist(
             mediaUri = latestCurrentUri,
             positionMs = latestPositionMs,
             durationMs = latestDurationMs,
             speed = speedToSave,
             aspectMode = latestAspect.name,
-            subtitleTrackId = subTokenToSave,
-            subtitleOffsetMs = subOffsetToSave,
         )
     }
 
