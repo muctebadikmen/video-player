@@ -35,6 +35,7 @@ class PlaybackMemoryRepository(
             0L
         }
         return ResolvedStartSettings(
+            mediaUri,
             startPositionMs,
             speed,
             aspectMode,

@@ -25,9 +25,19 @@ class PlayerViewModel(private val repo: PlaybackMemoryRepository) : ViewModel() 
     private val _resolved = MutableStateFlow<ResolvedStartSettings?>(null)
     val resolved: StateFlow<ResolvedStartSettings?> = _resolved.asStateFlow()
 
+    // Monotonic load token: a file open can transiently load a different uri (before the
+    // MediaController syncs the playlist index), so two loads may be in flight. Only the
+    // latest load's result may set _resolved — otherwise an earlier file's settings can
+    // clobber the current file's (a stale-resolved race that broke per-file subtitle restore).
+    private var loadSeq = 0
+
     fun load(mediaUri: String) {
         _resolved.value = null
-        viewModelScope.launch { _resolved.value = repo.resolveStart(mediaUri) }
+        val seq = ++loadSeq
+        viewModelScope.launch {
+            val r = repo.resolveStart(mediaUri)
+            if (seq == loadSeq) _resolved.value = r
+        }
     }
 
     fun persist(

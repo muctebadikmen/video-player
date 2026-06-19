@@ -69,4 +69,13 @@ class PlayerViewModelTest {
         assertThat(r.startPositionMs).isEqualTo(42_000L)
         assertThat(r.aspectMode).isEqualTo("FILL")
     }
+
+    @Test fun `resolved is tagged with the loaded media uri`() = runTest {
+        // The player's per-file effects ignore a resolved result whose mediaUri != the current
+        // item's uri (stale-resolved guard); this protects the field they rely on.
+        val vm = PlayerViewModel(repo)
+        vm.load("content://media/external/video/media/42")
+        val r = vm.resolved.filterNotNull().first()
+        assertThat(r.mediaUri).isEqualTo("content://media/external/video/media/42")
+    }
 }

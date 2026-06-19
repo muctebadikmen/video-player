@@ -262,6 +262,7 @@ fun PlayerScreen(
     // file with no saved override applies UNSPECIFIED, releasing any prior lock (including a manual one).
     LaunchedEffect(currentItem.uri, resolved) {
         val r = resolved
+        if (r != null && r.mediaUri != currentItem.uri) return@LaunchedEffect // ignore a stale (different-uri) result
         orientationMode = if (r != null) orientationModeFromActivityInfo(r.orientation) else OrientationMode.AUTO
         activity?.requestedOrientation = r?.orientation ?: ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
     }
@@ -297,6 +298,7 @@ fun PlayerScreen(
     // embedded track, the track list) are available. Guarded so it runs once per file.
     LaunchedEffect(currentItem.uri, resolved, state.textTracks) {
         val r = resolved ?: return@LaunchedEffect
+        if (r.mediaUri != currentItem.uri) return@LaunchedEffect // ignore a stale (different-uri) result
         if (subtitleRestored) return@LaunchedEffect
         when (val sel = parseSubtitleToken(r.subtitleTrackId)) {
             is SubtitleSelection.Off -> subtitleRestored = true // default-off effect already disabled embedded
@@ -348,6 +350,7 @@ fun PlayerScreen(
     // false), and the effect re-keys on `resolved`, so a late-arriving resolved is caught.
     LaunchedEffect(state.status, resolved) {
         val r = resolved
+        if (r != null && r.mediaUri != currentItem.uri) return@LaunchedEffect // ignore a stale (different-uri) result
         if (!resumeApplied && r != null && state.status == PlayerStatus.READY) {
             if (r.startPositionMs > 0) engine.seekTo(r.startPositionMs)
             engine.setSpeed(r.speed)

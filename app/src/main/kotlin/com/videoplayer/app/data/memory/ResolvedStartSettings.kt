@@ -2,6 +2,12 @@ package com.videoplayer.app.data.memory
 
 /** The settings the player should apply when a file opens, after precedence + resume policy. */
 data class ResolvedStartSettings(
+    /**
+     * The media uri these settings were resolved for. A file open can transiently load a
+     * different uri before the playlist index settles, so consumers must ignore a result
+     * whose [mediaUri] != the current item's uri (a stale-resolved guard).
+     */
+    val mediaUri: String,
     val startPositionMs: Long,
     val speed: Float,
     val aspectMode: String,
