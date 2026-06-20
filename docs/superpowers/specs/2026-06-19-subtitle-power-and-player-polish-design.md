@@ -6,7 +6,7 @@
 
 ## Goal & context
 
-The app is now self-distributed (signed APK via GitHub Releases + Obtainium), so we iterate fast without waiting on F-Droid review. This work adds four things the user asked for, shipped as three incremental signed releases:
+The app is now self-distributed (a signed APK installed directly, or via Obtainium pointed at the private repo with a GitHub token), so we iterate fast. This work adds four things the user asked for, shipped as three incremental signed releases:
 
 1. **A — Controls animation fix** (pause/controls overlay must fade in place, not slide in from a corner).
 2. **D — "Open with" from a file manager** (the app appears in the chooser for video files and plays them).
@@ -59,7 +59,7 @@ The app is now self-distributed (signed APK via GitHub Releases + Obtainium), so
 - **UI (CC menu / a "Subtitle sync" sheet):** ① Delay ±50 ms (exists) · ② Speed/rate ± steppers (e.g. ±0.001 fine, ±0.01 coarse, or FPS-style presets 23.976↔25) with the current value shown · ③ **Precise sync (two-point):** guided flow — "play to the first line, tap *Mark line 1*; play to a later line, tap *Mark line 2*" → captures each line's original cue start + the desired (current playback) time → computes rate+offset, applies, persists. Live on-screen preview throughout. Applies to external/downloaded subs only (embedded engine-rendered tracks are not re-timeable — inherent).
 
 ### B — OpenSubtitles search & download (L — the flagship)
-- **Manifest:** add `INTERNET` permission (first network access; makes a future F-Droid build `NonFreeNet` — acceptable, user self-distributes).
+- **Manifest:** add `INTERNET` permission (adds the app's first network access, for OpenSubtitles — the app is private / self-distributed).
 - **Pure core (`:core:playback` or a new pure file, TDD):** `SubtitleSearchResult` model (language, downloads, rating, fromTrusted, machineTranslated, release, fileId, fileName, hashMatch) + **`rankSubtitleResults(results, favoriteLanguages = [tr, en])`** — pin favorite languages to top, then sort by hashMatch, from_trusted, download_count, ratings; demote machine/AI-translated. Plus the **OSDb hash arithmetic** as a pure function over two 64 KiB byte arrays + filesize (the file IO that feeds it stays in `:app`). All TDD with the golden hash vector + ranking cases.
 - **`:app` — credentials:** `OpenSubtitlesCredentials` in DataStore (api key, username; store the session token + base_url; never persist the password). A Settings → OpenSubtitles section: Api-Key field, username, password, "Log in" (calls `/login`, shows quota/level), "Log out", with a link + short instructions for registering a free API Consumer.
 - **`:app` — client:** `OpenSubtitlesClient` (OkHttp + kotlinx.serialization): `login`, `search(hash?, query?, languages)`, `download(fileId) → bytes`, with the mandatory headers (incl. `User-Agent = "VideoPlayer v$versionName"`), `base_url` switching, token caching + 401-refresh, 429/5xx backoff, 406 quota surfacing. Unit-tested via MockWebServer.

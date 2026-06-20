@@ -19,7 +19,7 @@ FIRST, load full context (read these before acting):
 - Ledger: .git/sdd/progress.md — full task history; append progress as you complete each task/release.
 - Recent `git log --oneline -20`.
 
-CURRENT STATE: origin/main holds the spec + all three plans. v1.0.0 is RELEASED: the GitHub repo (muctebadikmen/video-player) is public, a signed APK is on GitHub Releases (tag v1.0.0), and F-Droid MR !40817 is open (leave it alone). The app is self-distributed via GitHub Releases + Obtainium. Full JVM test suite + clean signed assembleRelease are green. Signing key is at ~/keystores/videoplayer-release.jks, wired via the gitignored keystore.properties at the repo root.
+CURRENT STATE: origin/main holds the spec + all three plans. v1.0.0 is built + signed (tag v1.0.0): the GitHub repo (muctebadikmen/video-player) is PRIVATE. The app is distributed PRIVATELY — build a signed APK and install it directly on the owner's device (or via Obtainium pointed at the private repo with a GitHub token). F-Droid was withdrawn; do not interact with F-Droid. Full JVM test suite + clean signed assembleRelease are green. Signing key is at ~/keystores/videoplayer-release.jks, wired via the gitignored keystore.properties at the repo root.
 
 GOAL — deliver v1.1 → v1.2 → v1.3 in order; each FULLY finished, device-verified, merged, pushed, and released. For EACH release:
   1. Branch off main.
@@ -27,7 +27,7 @@ GOAL — deliver v1.1 → v1.2 → v1.3 in order; each FULLY finished, device-ve
   3. Device-verify the whole release on the `videoplayer` AVD (see the plan's Device verification task). Confirm no crashes via `adb logcat`.
   4. Final whole-branch review on the most capable model; fix any Critical/Important findings, record Minors.
   5. finishing-a-development-branch: merge ff to main, push to origin/main.
-  6. Release: bump versionCode + versionName in app/build.gradle.kts (v1.1.0=code 2, v1.2.0=code 3, v1.3.0=code 4), signed `assembleRelease`, then `gh release create vX.Y.Z --repo muctebadikmen/video-player --title "Video Player X.Y.Z" --notes-file <notes> app/build/outputs/apk/release/app-release.apk` (rename the asset to VideoPlayer-X.Y.Z.apk). Obtainium auto-updates the user's phone.
+  6. Release: bump versionCode + versionName in app/build.gradle.kts (v1.1.0=code 2, v1.2.0=code 3, v1.3.0=code 4), signed `assembleRelease`, then hand the signed APK to the owner to install — rename the asset to VideoPlayer-X.Y.Z.apk (from app/build/outputs/apk/release/app-release.apk). Optionally create a release on the PRIVATE repo with `gh release create vX.Y.Z --repo muctebadikmen/video-player --title "Video Player X.Y.Z" --notes-file <notes> VideoPlayer-X.Y.Z.apk` if the owner uses Obtainium-with-token. No public release, no F-Droid.
   7. Update .git/sdd/progress.md and the phase0-foundation-state memory.
   Then proceed to the next release.
 
@@ -40,21 +40,21 @@ BUILD & DEVICE SPECIFICS (these will bite a fresh session):
 - System JDK is 24 and breaks AGP — prefix EVERY gradle call: export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home". Wrapper only (./gradlew). `./gradlew test`, `:app:assembleDebug`, `:app:assembleRelease`. minSdk 24 / targetSdk 35. Keep :core:model and :core:playback PURE (no android.*/Compose/Media3/OkHttp). SPDX header on every new .kt.
 - Emulator: AVD `videoplayer` (API 35). Boot: ~/Library/Android/sdk/emulator/emulator -avd videoplayer -no-snapshot-save -no-boot-anim -gpu swiftshader_indirect -no-audio & then `adb wait-for-device`. adb at /opt/homebrew/bin/adb. Test clips at /sdcard/Movies/VPTest/ (clip0/1, clipA/B/C, clipEmbed.mkv + clipA.srt/clipEmbed.srt; re-create via ffmpeg if the AVD was wiped — recipe in the memory file).
 - Device-test gotchas: (1) screenshots are 1080×2400 — resize `sips -Z 1600 in.png --out out.png`, then ×1.5 the coords. (2) a SINGLE tap toggles controls; to pause, tap to show controls then tap the VISIBLE center button. (3) the CC subtitle DropdownMenu is flaky under scripted taps — verify subtitle state via `adb shell run-as com.videoplayer.app sqlite3 databases/video_player.db "SELECT ..."` + on-screen cue rendering, not just the menu. (4) `pm clear com.videoplayer.app` wipes per-file memory (re-grant READ_MEDIA_VIDEO + POST_NOTIFICATIONS). (5) playback auto-advances through the folder playlist.
-- Release/distribution: signing key ~/keystores/videoplayer-release.jks via gitignored keystore.properties (already set up). gh authed as muctebadikmen. Each release: version bump → signed assembleRelease → gh release create.
+- Release/distribution: signing key ~/keystores/videoplayer-release.jks via gitignored keystore.properties (already set up). gh authed as muctebadikmen (the repo is PRIVATE). Each release: version bump → signed assembleRelease → hand the signed APK to the owner to install directly (or, optionally, `gh release create` on the private repo for Obtainium-with-token).
 
 USER-SETUP PREREQUISITE (blocks ONLY v1.3 device-verify — not v1.1/v1.2): the OpenSubtitles feature needs the USER's own free OpenSubtitles account + a free "API Consumer" key (opensubtitles.com → Profile → API Consumers → New Consumer), which they enter in the app's Settings → OpenSubtitles. The app embeds NO credentials. Build v1.1 and v1.2 first. All of v1.3's code, unit tests (the OpenSubtitles client is tested against OkHttp MockWebServer), and builds proceed WITHOUT the account. Only when you reach v1.3's on-device login/search/download verification do you need it — at that point, if the user hasn't supplied an account+key, STOP and ask for it.
 
 AUTONOMY — proceed vs stop:
-- Keep going WITHOUT asking for: all code/tests/refactors within the plans, builds, device-verify, spawning subagents, checkpoint commits, merges to main, pushes to origin/main, version bumps, signed release builds, AND publishing the GitHub releases (the user has authorized self-distribution releases as the routine path — NOT a hard stop).
-- STOP and ask ONLY for: (1) the OpenSubtitles account/API key at v1.3's device-verify; (2) adding ANY dependency beyond the spec-approved OkHttp 4.12.0 + kotlinx-serialization-json 1.7.3 + MockWebServer(test); (3) the same error surviving 2 fix attempts — explain rather than thrash; (4) anything genuinely irreversible/outward-facing beyond a GitHub release (touching the F-Droid MR !40817, force-push, deleting work you didn't create).
+- Keep going WITHOUT asking for: all code/tests/refactors within the plans, builds, device-verify, spawning subagents, checkpoint commits, merges to main, pushes to origin/main, version bumps, signed release builds, AND building + handing over signed APKs (this is the routine path — NOT a hard stop).
+- STOP and ask ONLY for: (1) the OpenSubtitles account/API key at v1.3's device-verify; (2) adding ANY dependency beyond the spec-approved OkHttp 4.12.0 + kotlinx-serialization-json 1.7.3 + MockWebServer(test); (3) the same error surviving 2 fix attempts — explain rather than thrash; (4) anything genuinely irreversible/outward-facing (force-push, deleting work you didn't create).
 - Do NOT add the INTERNET permission until v1.3 (it belongs to feature B); v1.1 and v1.2 must stay network-free.
 
-Don't stop until v1.1.0, v1.2.0, and v1.3.0 are each built, device-verified, merged, pushed, and released — except the single human dependency (the OpenSubtitles account for v1.3's live verification). Then give a concise summary of all three releases and their Obtainium-update status.
+Don't stop until v1.1.0, v1.2.0, and v1.3.0 are each built, device-verified, merged, pushed, and a signed APK handed over — except the single human dependency (the OpenSubtitles account for v1.3's live verification). Then give a concise summary of all three releases and where each signed APK is (ready to install directly, or on the private repo for Obtainium-with-token).
 ```
 
 ---
 
 ## Notes for you (the human), not part of the prompt
 - The fresh chat will run for a while (v1.3/OpenSubtitles is the big one). It will pause once, at v1.3's on-device test, to ask for your OpenSubtitles account + API-Consumer key — have those ready (free: opensubtitles.com → register → Profile → API Consumers → New Consumer).
-- Each release auto-updates your phone via Obtainium; nothing else needed from you between releases.
+- Each release produces a signed APK to install directly on your phone (or, if you use Obtainium pointed at the private repo with a GitHub token, it can auto-update from there); nothing else needed from you between releases.
 - If you'd rather ship fewer/bigger releases, say so in the fresh chat — the plans are independent and can be combined.
