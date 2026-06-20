@@ -20,6 +20,10 @@ import com.videoplayer.app.data.memory.AppDatabase
 import com.videoplayer.app.data.memory.PlaybackMemoryRepository
 import com.videoplayer.app.data.memory.SettingsRepository
 import com.videoplayer.app.data.memory.settingsDataStore
+import com.videoplayer.app.data.saf.LibrarySourceManager
+import com.videoplayer.app.data.saf.LibrarySourceStore
+import com.videoplayer.app.data.saf.SafFolderRepository
+import com.videoplayer.app.data.saf.libraryDataStore
 import com.videoplayer.app.intent.synthesizeMediaItem
 import com.videoplayer.app.library.LibraryScreen
 import com.videoplayer.app.library.LibraryViewModel
@@ -39,8 +43,13 @@ fun VideoPlayerApp(
     val appContext = LocalContext.current.applicationContext
     val libraryViewModel: LibraryViewModel = viewModel {
         val db = AppDatabase.getInstance(appContext)
+        val manager = LibrarySourceManager(
+            store = LibrarySourceStore(appContext.libraryDataStore),
+            globalRepository = MediaStoreRepository(appContext),
+            folderRepositoryFactory = { treeUri -> SafFolderRepository(appContext, Uri.parse(treeUri)) },
+        )
         LibraryViewModel(
-            MediaStoreRepository(appContext),
+            manager,
             PlaybackMemoryRepository(db.playbackMemoryDao(), SettingsRepository(appContext.settingsDataStore)),
         )
     }
