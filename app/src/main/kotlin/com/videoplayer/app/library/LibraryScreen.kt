@@ -6,20 +6,19 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -30,10 +29,13 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.OndemandVideo
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -43,6 +45,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
@@ -57,15 +60,19 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import coil3.compose.AsyncImage
+import coil3.request.ImageRequest
+import coil3.request.crossfade
+import coil3.video.videoFrameMillis
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.videoplayer.core.model.MediaFolder
 import com.videoplayer.core.model.MediaItem
 import com.videoplayer.core.model.SortKey
 import com.videoplayer.core.model.SortOrder
@@ -121,6 +128,7 @@ fun LibraryScreen(
             onToggleViewMode = {
                 viewModel.setViewMode(if (state.viewMode == ViewMode.LIST) ViewMode.GRID else ViewMode.LIST)
             },
+            onCycleGridSize = viewModel::cycleGridSize,
             onOpenSettings = onOpenSettings,
             onOpenDrawer = onOpenDrawer,
             scopeName = scopeName,
@@ -137,7 +145,23 @@ fun LibraryScreen(
                 CircularProgressIndicator()
             }
             LibraryBodyState.EMPTY -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("No videos found", style = MaterialTheme.typography.bodyLarge)
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Icon(
+                        Icons.Filled.VideoLibrary,
+                        contentDescription = null,
+                        modifier = Modifier.size(64.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                    )
+                    Text("No videos found", style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        "Add a folder from the menu to get started",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
             LibraryBodyState.CONTENT -> {
                 if (state.continueWatching.isNotEmpty()) {
@@ -157,11 +181,12 @@ fun LibraryScreen(
                 }
                 when (state.tab) {
                     LibraryTab.FOLDERS -> FoldersContent(
-                        folders = state.folders, viewMode = state.viewMode,
+                        folders = state.folders, gridSize = state.gridSize,
+                        query = state.query,
                         progress = state.progressByUri, onItemClick = onItemClick,
                     )
                     LibraryTab.VIDEOS -> VideosContent(
-                        videos = state.videos, viewMode = state.viewMode,
+                        videos = state.videos, viewMode = state.viewMode, gridSize = state.gridSize,
                         progress = state.progressByUri, onItemClick = onItemClick,
                     )
                 }
@@ -181,6 +206,7 @@ private fun LibraryTopBar(
     onSortChange: (SortKey, SortOrder) -> Unit,
     viewMode: ViewMode,
     onToggleViewMode: () -> Unit,
+    onCycleGridSize: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenDrawer: () -> Unit = {},
     scopeName: String? = null,
@@ -281,6 +307,12 @@ private fun LibraryTopBar(
                 Icon(Icons.AutoMirrored.Filled.List, contentDescription = "Switch to list view")
             }
         }
+        // Grid size cycle (only visible in grid mode)
+        if (viewMode == ViewMode.GRID) {
+            IconButton(onClick = onCycleGridSize) {
+                Icon(Icons.Default.Apps, contentDescription = "Cycle grid size")
+            }
+        }
         IconButton(onClick = onOpenSettings) {
             Icon(Icons.Default.Settings, contentDescription = "Settings")
         }
@@ -312,8 +344,8 @@ private fun ContinueWatchingRow(items: List<LibraryItemUi>, onItemClick: (MediaI
                 ThumbnailTile(
                     item = ui.item,
                     progress = ui.progress,
-                    width = 160.dp,
                     onClick = { onItemClick(ui.item) },
+                    modifier = Modifier.width(160.dp),
                 )
             }
         }
@@ -327,12 +359,13 @@ private fun ContinueWatchingRow(items: List<LibraryItemUi>, onItemClick: (MediaI
 private fun VideosContent(
     videos: List<MediaItem>,
     viewMode: ViewMode,
+    gridSize: GridSize,
     progress: Map<String, Float>,
     onItemClick: (MediaItem) -> Unit,
 ) {
     if (viewMode == ViewMode.GRID) {
         LazyVerticalGrid(
-            columns = GridCells.Adaptive(140.dp),
+            columns = GridCells.Fixed(gridSize.columns),
             contentPadding = PaddingValues(12.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -341,7 +374,6 @@ private fun VideosContent(
                 ThumbnailTile(
                     item = item,
                     progress = progress[item.uri] ?: 0f,
-                    width = 140.dp,
                     onClick = { onItemClick(item) },
                 )
             }
@@ -359,87 +391,62 @@ private fun VideosContent(
     }
 }
 
-// ─── Folders tab content ──────────────────────────────────────────────────────
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun FoldersContent(
-    folders: List<MediaFolder>,
-    viewMode: ViewMode,
-    progress: Map<String, Float>,
-    onItemClick: (MediaItem) -> Unit,
-) {
-    LazyColumn {
-        folders.forEach { folder ->
-            item(key = "folder:${folder.path}") {
-                Text(
-                    text = "${folder.name} · ${folder.videoCount}",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                )
-                if (viewMode == ViewMode.GRID) {
-                    FlowRow(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        folder.items.forEach { item ->
-                            ThumbnailTile(
-                                item = item,
-                                progress = progress[item.uri] ?: 0f,
-                                width = 140.dp,
-                                onClick = { onItemClick(item) },
-                            )
-                        }
-                    }
-                }
-            }
-            if (viewMode == ViewMode.LIST) {
-                items(folder.items, key = { "item:${it.id}" }) { item ->
-                    MediaRow(
-                        mediaItem = item,
-                        progress = progress[item.uri] ?: 0f,
-                        onClick = { onItemClick(item) },
-                    )
-                }
-            }
-        }
-    }
-}
-
 // ─── Shared item composables ──────────────────────────────────────────────────
 
 @Composable
-private fun ThumbnailTile(
+internal fun ThumbnailTile(
     item: MediaItem,
     progress: Float,
-    width: Dp,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    val bitmap = rememberThumbnail(item.uri)
     Column(
-        Modifier
-            .width(width)
+        modifier
             .clickable(onClick = onClick),
     ) {
         Box(
             Modifier
                 .fillMaxWidth()
                 .aspectRatio(16f / 9f)
-                .clip(RoundedCornerShape(8.dp))
+                .clip(RoundedCornerShape(12.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant),
         ) {
-            if (bitmap != null) {
-                Image(
-                    bitmap = bitmap.asImageBitmap(),
-                    contentDescription = item.displayName,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop,
-                )
+            VideoThumbnail(uri = item.uri, modifier = Modifier.fillMaxSize())
+
+            // Bottom gradient scrim — keeps duration chip legible over bright frames
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp)
+                    .align(Alignment.BottomCenter)
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.4f)),
+                        ),
+                    )
+                    .padding(bottom = if (progress > 0f) 4.dp else 0.dp)
+                    .padding(top = 16.dp),
+            )
+
+            // Duration chip — bottom-end corner, hidden when duration unknown
+            if (item.durationMs > 0L) {
+                Surface(
+                    shape = RoundedCornerShape(4.dp),
+                    color = Color.Black.copy(alpha = 0.7f),
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = 4.dp, bottom = if (progress > 0f) 6.dp else 4.dp),
+                ) {
+                    Text(
+                        text = formatDuration(item.durationMs),
+                        color = Color.White,
+                        fontSize = 10.sp,
+                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                    )
+                }
             }
+
+            // Resume progress bar — pinned at very bottom edge, over the scrim
             if (progress > 0f) {
                 LinearProgressIndicator(
                     progress = { progress },
@@ -451,16 +458,10 @@ private fun ThumbnailTile(
         }
         Text(
             text = item.displayName,
-            style = MaterialTheme.typography.bodySmall,
-            maxLines = 1,
+            style = MaterialTheme.typography.bodyMedium,
+            maxLines = 2,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(top = 4.dp),
-        )
-        Text(
-            text = formatDuration(item.durationMs),
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
         )
     }
 }
@@ -471,7 +472,6 @@ private fun MediaRow(
     progress: Float,
     onClick: () -> Unit,
 ) {
-    val bitmap = rememberThumbnail(mediaItem.uri)
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -485,17 +485,10 @@ private fun MediaRow(
             Modifier
                 .width(80.dp)
                 .aspectRatio(16f / 9f)
-                .clip(RoundedCornerShape(4.dp))
+                .clip(RoundedCornerShape(8.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant),
         ) {
-            if (bitmap != null) {
-                Image(
-                    bitmap = bitmap.asImageBitmap(),
-                    contentDescription = mediaItem.displayName,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop,
-                )
-            }
+            VideoThumbnail(uri = mediaItem.uri, modifier = Modifier.fillMaxSize())
         }
         // Text + optional progress
         Column(Modifier.weight(1f)) {
@@ -519,5 +512,28 @@ private fun MediaRow(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun VideoThumbnail(uri: String, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    Box(modifier, contentAlignment = Alignment.Center) {
+        Icon(
+            Icons.Filled.OndemandVideo,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+            modifier = Modifier.size(32.dp),
+        )
+        AsyncImage(
+            model = ImageRequest.Builder(context)
+                .data(uri)
+                .videoFrameMillis(1_000)
+                .crossfade(true)
+                .build(),
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize(),
+        )
     }
 }

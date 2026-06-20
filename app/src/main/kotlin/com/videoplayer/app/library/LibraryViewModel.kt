@@ -3,6 +3,7 @@ package com.videoplayer.app.library
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.videoplayer.app.data.memory.GridSizePreferences
 import com.videoplayer.app.data.memory.MemorySource
 import com.videoplayer.app.data.saf.LibrarySourceId
 import com.videoplayer.app.data.saf.LibrarySourceManager
@@ -21,21 +22,24 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 enum class LibraryTab { FOLDERS, VIDEOS }
 enum class ViewMode { LIST, GRID }
+enum class GridSize(val columns: Int) { SMALL(4), MEDIUM(3), LARGE(2) }
 
 /** One library row/tile: the media plus its 0..1 resume progress. */
 data class LibraryItemUi(val item: MediaItem, val progress: Float)
 
 data class LibraryUiState(
     val tab: LibraryTab = LibraryTab.FOLDERS,
-    val viewMode: ViewMode = ViewMode.LIST,
+    val viewMode: ViewMode = ViewMode.GRID,
     val sortKey: SortKey = SortKey.NAME,
     val sortOrder: SortOrder = SortOrder.ASC,
     val query: String = "",
+    val gridSize: GridSize = GridSize.MEDIUM,
     val folders: List<MediaFolder> = emptyList(),
     val videos: List<MediaItem> = emptyList(),
     val continueWatching: List<LibraryItemUi> = emptyList(),
@@ -47,10 +51,11 @@ data class LibraryUiState(
 
 private data class Controls(
     val tab: LibraryTab = LibraryTab.FOLDERS,
-    val viewMode: ViewMode = ViewMode.LIST,
+    val viewMode: ViewMode = ViewMode.GRID,
     val sortKey: SortKey = SortKey.NAME,
     val sortOrder: SortOrder = SortOrder.ASC,
     val query: String = "",
+    val gridSize: GridSize = GridSize.MEDIUM,
 )
 
 /**
@@ -60,10 +65,19 @@ private data class Controls(
 class LibraryViewModel(
     private val sourceManager: LibrarySourceManager,
     memorySource: MemorySource,
+    private val settings: GridSizePreferences,
 ) : ViewModel() {
 
     private val controls = MutableStateFlow(Controls())
     private val loading = MutableStateFlow(true)
+
+    init {
+        viewModelScope.launch {
+            val savedColumns = settings.gridColumns.first()
+            val savedSize = GridSize.entries.firstOrNull { it.columns == savedColumns } ?: GridSize.MEDIUM
+            controls.value = controls.value.copy(gridSize = savedSize)
+        }
+    }
 
     private data class Sources(
         val folders: List<MediaFolder>,
@@ -91,6 +105,7 @@ class LibraryViewModel(
                 .mapNotNull { wp -> itemByUri[wp.mediaUri]?.let { LibraryItemUi(it, progressFraction(wp.positionMs, wp.durationMs)) } }
             LibraryUiState(
                 tab = c.tab, viewMode = c.viewMode, sortKey = c.sortKey, sortOrder = c.sortOrder, query = c.query,
+                gridSize = c.gridSize,
                 folders = sortedFolders, videos = videos, continueWatching = cw, progressByUri = progressByUri,
                 savedFolders = src.saved, activeSource = src.active, isLoading = isLoading,
             )
@@ -112,4 +127,13 @@ class LibraryViewModel(
     fun setViewMode(mode: ViewMode) { controls.value = controls.value.copy(viewMode = mode) }
     fun setSort(key: SortKey, order: SortOrder) { controls.value = controls.value.copy(sortKey = key, sortOrder = order) }
     fun setQuery(query: String) { controls.value = controls.value.copy(query = query) }
+    fun cycleGridSize() {
+        val next = when (controls.value.gridSize) {
+            GridSize.SMALL -> GridSize.MEDIUM
+            GridSize.MEDIUM -> GridSize.LARGE
+            GridSize.LARGE -> GridSize.SMALL
+        }
+        controls.value = controls.value.copy(gridSize = next)
+        viewModelScope.launch { settings.setGridColumns(next.columns) }
+    }
 }
