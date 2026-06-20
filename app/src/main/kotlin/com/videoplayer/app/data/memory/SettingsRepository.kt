@@ -19,7 +19,7 @@ val Context.settingsDataStore: DataStore<Preferences> by preferencesDataStore(na
  * Global playback defaults (the lowest precedence tier). No settings UI exists yet
  * (P1.H) — these read their defaults today and are forward-ready for a settings screen.
  */
-class SettingsRepository(private val dataStore: DataStore<Preferences>) {
+class SettingsRepository(private val dataStore: DataStore<Preferences>) : GridSizePreferences {
 
     private object Keys {
         val RESUME_ENABLED = booleanPreferencesKey("resume_enabled")
@@ -46,9 +46,9 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>) {
         dataStore.edit { it[Keys.BACKGROUND_PLAYBACK] = enabled }
     }
 
-    val gridColumns: Flow<Int> = dataStore.data.map { it[Keys.GRID_COLUMNS] ?: 3 }
+    override val gridColumns: Flow<Int> = dataStore.data.map { it[Keys.GRID_COLUMNS] ?: 3 }
 
-    suspend fun setGridColumns(columns: Int) {
+    override suspend fun setGridColumns(columns: Int) {
         dataStore.edit { it[Keys.GRID_COLUMNS] = columns }
     }
 }

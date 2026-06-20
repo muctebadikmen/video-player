@@ -3,8 +3,8 @@ package com.videoplayer.app.library
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.videoplayer.app.data.memory.GridSizePreferences
 import com.videoplayer.app.data.memory.MemorySource
-import com.videoplayer.app.data.memory.SettingsRepository
 import com.videoplayer.app.data.saf.LibrarySourceId
 import com.videoplayer.app.data.saf.LibrarySourceManager
 import com.videoplayer.app.data.saf.SavedFolder
@@ -65,7 +65,7 @@ private data class Controls(
 class LibraryViewModel(
     private val sourceManager: LibrarySourceManager,
     memorySource: MemorySource,
-    private val settings: SettingsRepository,
+    private val settings: GridSizePreferences,
 ) : ViewModel() {
 
     private val controls = MutableStateFlow(Controls())
