@@ -27,6 +27,7 @@ import com.videoplayer.core.playback.PlaybackEngine
 import com.videoplayer.core.playback.PlaybackState
 import com.videoplayer.core.playback.PlayerStatus
 import com.videoplayer.core.playback.TextTrackInfo
+import com.videoplayer.core.playback.pickDefaultTextTrack
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -105,6 +106,13 @@ class Media3PlaybackEngine(context: Context) : PlaybackEngine {
     private var released = false
     private var latestTracks: Tracks? = null
 
+    /**
+     * True once the user has explicitly chosen a text track (including disabling) for the
+     * current media item. Reset to false on each media-item transition so the auto-enable
+     * logic in [applyTracks] fires fresh for every new video.
+     */
+    private var userChoseTextTrack = false
+
     /** Service player's audio session id, used to attach a LoudnessEnhancer for >100% volume. */
     val audioSessionId: Int get() = _state.value.audioSessionId
 
@@ -126,6 +134,8 @@ class Media3PlaybackEngine(context: Context) : PlaybackEngine {
 
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
             val c = controller ?: return
+            // Reset user-choice flag so auto-enable fires fresh for the new video.
+            userChoseTextTrack = false
             _state.update {
                 it.copy(
                     currentMediaIndex = c.currentMediaItemIndex,
@@ -208,6 +218,11 @@ class Media3PlaybackEngine(context: Context) : PlaybackEngine {
             textGroupIndex++
         }
         _state.update { it.copy(textTracks = infos, selectedTextTrackId = selectedId) }
+        // Auto-enable the first embedded subtitle when the media is fresh and the user
+        // hasn't made a choice yet. pickDefaultTextTrack returns null if already selected
+        // or user has chosen — safe to call every onTracksChanged without causing a loop.
+        val autoId = pickDefaultTextTrack(infos, selectedId, userChoseTextTrack)
+        if (autoId != null) applyTextTrackOverride(autoId)
     }
 
     /** Run [block] on the controller now, or queue it to replay once connected. */
@@ -278,7 +293,13 @@ class Media3PlaybackEngine(context: Context) : PlaybackEngine {
         _state.update { it.copy(speed = speed) }
     }
 
-    override fun selectEmbeddedTextTrack(id: String?) = withController { c ->
+    /**
+     * Low-level helper: apply a text-track override to the controller without touching
+     * [userChoseTextTrack]. Called by both the public [selectEmbeddedTextTrack] (which
+     * sets the user flag first) and the auto-enable path in [applyTracks] (which must
+     * NOT set the flag so the user's future choices are still respected).
+     */
+    private fun applyTextTrackOverride(id: String?) = withController { c ->
         val builder = c.trackSelectionParameters.buildUpon()
             .clearOverridesOfType(C.TRACK_TYPE_TEXT)
         val parsed = id?.let { parseTextTrackId(it) }
@@ -297,6 +318,11 @@ class Media3PlaybackEngine(context: Context) : PlaybackEngine {
             c.trackSelectionParameters = builder.build()
             _state.update { it.copy(selectedTextTrackId = null) }
         }
+    }
+
+    override fun selectEmbeddedTextTrack(id: String?) {
+        userChoseTextTrack = true
+        applyTextTrackOverride(id)
     }
 
     /** Stop + clear the service player. Used when exiting the player to the library. */
