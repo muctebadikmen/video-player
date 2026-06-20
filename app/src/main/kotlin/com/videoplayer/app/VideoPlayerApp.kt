@@ -53,6 +53,7 @@ fun VideoPlayerApp(
     val appContext = LocalContext.current.applicationContext
     val libraryViewModel: LibraryViewModel = viewModel {
         val db = AppDatabase.getInstance(appContext)
+        val settingsRepository = SettingsRepository(appContext.settingsDataStore)
         val manager = LibrarySourceManager(
             store = LibrarySourceStore(appContext.libraryDataStore),
             globalRepository = MediaStoreRepository(appContext),
@@ -60,7 +61,8 @@ fun VideoPlayerApp(
         )
         LibraryViewModel(
             manager,
-            PlaybackMemoryRepository(db.playbackMemoryDao(), SettingsRepository(appContext.settingsDataStore)),
+            PlaybackMemoryRepository(db.playbackMemoryDao(), settingsRepository),
+            settingsRepository,
         )
     }
 

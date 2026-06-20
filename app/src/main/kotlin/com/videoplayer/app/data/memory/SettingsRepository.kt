@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -24,6 +25,7 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>) {
         val RESUME_ENABLED = booleanPreferencesKey("resume_enabled")
         val DEFAULT_SPEED = floatPreferencesKey("default_speed")
         val BACKGROUND_PLAYBACK = booleanPreferencesKey("background_playback")
+        val GRID_COLUMNS = intPreferencesKey("grid_columns")
     }
 
     val resumeEnabled: Flow<Boolean> = dataStore.data.map { it[Keys.RESUME_ENABLED] ?: true }
@@ -42,5 +44,11 @@ class SettingsRepository(private val dataStore: DataStore<Preferences>) {
 
     suspend fun setBackgroundPlaybackEnabled(enabled: Boolean) {
         dataStore.edit { it[Keys.BACKGROUND_PLAYBACK] = enabled }
+    }
+
+    val gridColumns: Flow<Int> = dataStore.data.map { it[Keys.GRID_COLUMNS] ?: 3 }
+
+    suspend fun setGridColumns(columns: Int) {
+        dataStore.edit { it[Keys.GRID_COLUMNS] = columns }
     }
 }

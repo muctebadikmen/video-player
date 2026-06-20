@@ -30,6 +30,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.Apps
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.OndemandVideo
@@ -125,6 +126,7 @@ fun LibraryScreen(
             onToggleViewMode = {
                 viewModel.setViewMode(if (state.viewMode == ViewMode.LIST) ViewMode.GRID else ViewMode.LIST)
             },
+            onCycleGridSize = viewModel::cycleGridSize,
             onOpenSettings = onOpenSettings,
             onOpenDrawer = onOpenDrawer,
             scopeName = scopeName,
@@ -161,11 +163,11 @@ fun LibraryScreen(
                 }
                 when (state.tab) {
                     LibraryTab.FOLDERS -> FoldersContent(
-                        folders = state.folders, viewMode = state.viewMode,
+                        folders = state.folders, viewMode = state.viewMode, gridSize = state.gridSize,
                         progress = state.progressByUri, onItemClick = onItemClick,
                     )
                     LibraryTab.VIDEOS -> VideosContent(
-                        videos = state.videos, viewMode = state.viewMode,
+                        videos = state.videos, viewMode = state.viewMode, gridSize = state.gridSize,
                         progress = state.progressByUri, onItemClick = onItemClick,
                     )
                 }
@@ -185,6 +187,7 @@ private fun LibraryTopBar(
     onSortChange: (SortKey, SortOrder) -> Unit,
     viewMode: ViewMode,
     onToggleViewMode: () -> Unit,
+    onCycleGridSize: () -> Unit,
     onOpenSettings: () -> Unit,
     onOpenDrawer: () -> Unit = {},
     scopeName: String? = null,
@@ -285,6 +288,12 @@ private fun LibraryTopBar(
                 Icon(Icons.AutoMirrored.Filled.List, contentDescription = "Switch to list view")
             }
         }
+        // Grid size cycle (only visible in grid mode)
+        if (viewMode == ViewMode.GRID) {
+            IconButton(onClick = onCycleGridSize) {
+                Icon(Icons.Default.Apps, contentDescription = "Cycle grid size")
+            }
+        }
         IconButton(onClick = onOpenSettings) {
             Icon(Icons.Default.Settings, contentDescription = "Settings")
         }
@@ -331,12 +340,13 @@ private fun ContinueWatchingRow(items: List<LibraryItemUi>, onItemClick: (MediaI
 private fun VideosContent(
     videos: List<MediaItem>,
     viewMode: ViewMode,
+    gridSize: GridSize,
     progress: Map<String, Float>,
     onItemClick: (MediaItem) -> Unit,
 ) {
     if (viewMode == ViewMode.GRID) {
         LazyVerticalGrid(
-            columns = GridCells.Adaptive(140.dp),
+            columns = GridCells.Fixed(gridSize.columns),
             contentPadding = PaddingValues(12.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -370,6 +380,7 @@ private fun VideosContent(
 private fun FoldersContent(
     folders: List<MediaFolder>,
     viewMode: ViewMode,
+    gridSize: GridSize,
     progress: Map<String, Float>,
     onItemClick: (MediaItem) -> Unit,
 ) {
@@ -387,6 +398,7 @@ private fun FoldersContent(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 12.dp),
+                        maxItemsInEachRow = gridSize.columns,
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
