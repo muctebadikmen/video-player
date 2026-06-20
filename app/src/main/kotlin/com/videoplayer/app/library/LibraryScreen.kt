@@ -66,7 +66,6 @@ import coil3.request.crossfade
 import coil3.video.videoFrameMillis
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -325,8 +324,8 @@ private fun ContinueWatchingRow(items: List<LibraryItemUi>, onItemClick: (MediaI
                 ThumbnailTile(
                     item = ui.item,
                     progress = ui.progress,
-                    width = 160.dp,
                     onClick = { onItemClick(ui.item) },
+                    modifier = Modifier.width(160.dp),
                 )
             }
         }
@@ -355,7 +354,6 @@ private fun VideosContent(
                 ThumbnailTile(
                     item = item,
                     progress = progress[item.uri] ?: 0f,
-                    width = 140.dp,
                     onClick = { onItemClick(item) },
                 )
             }
@@ -406,8 +404,8 @@ private fun FoldersContent(
                             ThumbnailTile(
                                 item = item,
                                 progress = progress[item.uri] ?: 0f,
-                                width = 140.dp,
                                 onClick = { onItemClick(item) },
+                                modifier = Modifier.weight(1f),
                             )
                         }
                     }
@@ -432,12 +430,11 @@ private fun FoldersContent(
 private fun ThumbnailTile(
     item: MediaItem,
     progress: Float,
-    width: Dp,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     Column(
-        Modifier
-            .width(width)
+        modifier
             .clickable(onClick = onClick),
     ) {
         Box(
