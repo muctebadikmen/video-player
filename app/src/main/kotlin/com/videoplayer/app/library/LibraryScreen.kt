@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.OndemandVideo
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -43,6 +44,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
@@ -57,6 +59,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
@@ -65,6 +69,7 @@ import coil3.video.videoFrameMillis
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.videoplayer.core.model.MediaItem
@@ -139,7 +144,23 @@ fun LibraryScreen(
                 CircularProgressIndicator()
             }
             LibraryBodyState.EMPTY -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("No videos found", style = MaterialTheme.typography.bodyLarge)
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Icon(
+                        Icons.Filled.VideoLibrary,
+                        contentDescription = null,
+                        modifier = Modifier.size(64.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                    )
+                    Text("No videos found", style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        "Add a folder from the menu to get started",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
             LibraryBodyState.CONTENT -> {
                 if (state.continueWatching.isNotEmpty()) {
@@ -386,10 +407,44 @@ internal fun ThumbnailTile(
             Modifier
                 .fillMaxWidth()
                 .aspectRatio(16f / 9f)
-                .clip(RoundedCornerShape(8.dp))
+                .clip(RoundedCornerShape(12.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant),
         ) {
             VideoThumbnail(uri = item.uri, modifier = Modifier.fillMaxSize())
+
+            // Bottom gradient scrim — keeps duration chip legible over bright frames
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.BottomCenter)
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.4f)),
+                        ),
+                    )
+                    .padding(bottom = if (progress > 0f) 4.dp else 0.dp)
+                    .padding(top = 16.dp),
+            )
+
+            // Duration chip — bottom-end corner, hidden when duration unknown
+            if (item.durationMs > 0L) {
+                Surface(
+                    shape = RoundedCornerShape(4.dp),
+                    color = Color.Black.copy(alpha = 0.7f),
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = 4.dp, bottom = if (progress > 0f) 6.dp else 4.dp),
+                ) {
+                    Text(
+                        text = formatDuration(item.durationMs),
+                        color = Color.White,
+                        fontSize = 10.sp,
+                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
+                    )
+                }
+            }
+
+            // Resume progress bar — pinned at very bottom edge, over the scrim
             if (progress > 0f) {
                 LinearProgressIndicator(
                     progress = { progress },
@@ -401,16 +456,10 @@ internal fun ThumbnailTile(
         }
         Text(
             text = item.displayName,
-            style = MaterialTheme.typography.bodySmall,
-            maxLines = 1,
+            style = MaterialTheme.typography.bodyMedium,
+            maxLines = 2,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(top = 4.dp),
-        )
-        Text(
-            text = formatDuration(item.durationMs),
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
         )
     }
 }

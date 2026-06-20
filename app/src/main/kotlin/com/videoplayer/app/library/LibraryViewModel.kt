@@ -35,7 +35,7 @@ data class LibraryItemUi(val item: MediaItem, val progress: Float)
 
 data class LibraryUiState(
     val tab: LibraryTab = LibraryTab.FOLDERS,
-    val viewMode: ViewMode = ViewMode.LIST,
+    val viewMode: ViewMode = ViewMode.GRID,
     val sortKey: SortKey = SortKey.NAME,
     val sortOrder: SortOrder = SortOrder.ASC,
     val query: String = "",
@@ -51,7 +51,7 @@ data class LibraryUiState(
 
 private data class Controls(
     val tab: LibraryTab = LibraryTab.FOLDERS,
-    val viewMode: ViewMode = ViewMode.LIST,
+    val viewMode: ViewMode = ViewMode.GRID,
     val sortKey: SortKey = SortKey.NAME,
     val sortOrder: SortOrder = SortOrder.ASC,
     val query: String = "",
