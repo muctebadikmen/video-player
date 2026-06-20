@@ -2,15 +2,21 @@
 package com.videoplayer.app.data.saf
 
 import android.content.Context
+import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.provider.DocumentsContract
 import com.videoplayer.core.model.MediaFolder
 import com.videoplayer.core.model.MediaRepository
 import com.videoplayer.core.model.groupIntoFolders
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 
 /**
@@ -29,7 +35,9 @@ class SafFolderRepository(
     override suspend fun refresh() = withContext(Dispatchers.IO) {
         val rootDocId = DocumentsContract.getTreeDocumentId(treeUri)
         val rootName = rootDisplayName(rootDocId)
-        _folders.value = groupIntoFolders(walkSafTree(rootDocId, rootName, ::listChildren))
+        val folders = groupIntoFolders(walkSafTree(rootDocId, rootName, ::listChildren))
+        _folders.value = folders                       // show immediately, durations = 0
+        _folders.value = resolveDurations(folders)     // fill durations, re-emit
     }
 
     private fun rootDisplayName(rootDocId: String): String {
@@ -66,5 +74,32 @@ class SafFolderRepository(
                 }
             }
         } ?: emptyList()
+    }
+
+    private suspend fun resolveDurations(folders: List<MediaFolder>): List<MediaFolder> = coroutineScope {
+        val gate = Semaphore(permits = 4)              // bound concurrent retrievers
+        folders.map { folder ->
+            val items = folder.items.map { item ->
+                async {
+                    gate.withPermit {
+                        val ms = durationMsOf(Uri.parse(item.uri))
+                        if (ms > 0) item.copy(durationMs = ms) else item
+                    }
+                }
+            }
+            folder.copy(items = items.awaitAll())
+        }
+    }
+
+    private fun durationMsOf(uri: Uri): Long {
+        val r = MediaMetadataRetriever()
+        return try {
+            r.setDataSource(context, uri)
+            r.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
+        } catch (_: Exception) {
+            0L
+        } finally {
+            runCatching { r.release() }
+        }
     }
 }
