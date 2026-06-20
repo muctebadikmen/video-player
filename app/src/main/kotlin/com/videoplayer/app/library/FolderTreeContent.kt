@@ -4,12 +4,14 @@ package com.videoplayer.app.library
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -193,26 +195,39 @@ private fun VideoGridRow(
     progress: Map<String, Float>,
     onItemClick: (MediaItem) -> Unit,
 ) {
-    FlowRow(
+    val columns = gridSize.columns
+    val startIndent = (depth * 16).dp
+    val endPad = 12.dp
+    val spacing = 12.dp
+
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxWidth()
             .padding(
-                start = (depth * 16).dp,
-                end = 12.dp,
+                start = startIndent,
+                end = endPad,
                 top = 4.dp,
                 bottom = 8.dp,
             ),
-        maxItemsInEachRow = gridSize.columns,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        items.forEach { item ->
-            ThumbnailTile(
-                item = item,
-                progress = progress[item.uri] ?: 0f,
-                onClick = { onItemClick(item) },
-                modifier = Modifier.weight(1f),
-            )
+        // maxWidth here is the width after the padding above has been applied,
+        // so the tile budget is the full available width minus inter-tile spacing.
+        val tileWidth = (maxWidth - spacing * (columns - 1)) / columns
+
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            maxItemsInEachRow = columns,
+            horizontalArrangement = Arrangement.spacedBy(spacing),
+            verticalArrangement = Arrangement.spacedBy(spacing),
+        ) {
+            items.forEach { item ->
+                ThumbnailTile(
+                    item = item,
+                    progress = progress[item.uri] ?: 0f,
+                    onClick = { onItemClick(item) },
+                    modifier = Modifier.width(tileWidth),
+                )
+            }
         }
     }
 }
