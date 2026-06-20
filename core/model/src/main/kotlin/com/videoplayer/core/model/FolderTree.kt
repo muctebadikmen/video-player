@@ -14,13 +14,30 @@ data class FolderNode(
 private class MutableNode(val name: String, val path: String) {
     var items: List<MediaItem> = emptyList()
     val children = LinkedHashMap<String, MutableNode>()
-    fun toNode(): FolderNode = FolderNode(
-        name = name,
-        path = path,
-        items = items,
-        children = children.values
-            .map { it.toNode() }
-            .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name }),
+    fun toNode(): FolderNode = collapse(
+        FolderNode(
+            name = name,
+            path = path,
+            items = items,
+            children = children.values
+                .map { it.toNode() }
+                .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.name }),
+        )
+    )
+}
+
+/** Collapse a single-child chain: a node with no direct items and exactly one child
+ *  is merged with that child, joining display names with '/' and keeping the deepest path. */
+private fun collapse(node: FolderNode): FolderNode {
+    if (node.items.isNotEmpty() || node.children.size != 1) return node
+    val child = node.children[0]
+    return collapse(
+        FolderNode(
+            name = "${node.name}/${child.name}",
+            path = child.path,
+            items = child.items,
+            children = child.children,
+        )
     )
 }
 
