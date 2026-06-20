@@ -8,7 +8,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material3.DrawerState
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -37,6 +38,7 @@ fun LibraryDrawer(
     onSelectFolder: (SavedFolder) -> Unit,
     onAddFolder: () -> Unit,
     onRemoveFolder: (SavedFolder) -> Unit,
+    unavailableTreeUris: Set<String> = emptySet(),
     content: @Composable () -> Unit,
 ) {
     ModalNavigationDrawer(
@@ -46,7 +48,7 @@ fun LibraryDrawer(
                 LazyColumn(Modifier.padding(horizontal = 12.dp)) {
                     item {
                         NavigationDrawerItem(
-                            icon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = null) },
+                            icon = { Icon(Icons.Filled.VideoLibrary, contentDescription = null) },
                             label = { Text("All videos") },
                             selected = activeSource is LibrarySourceId.Global,
                             onClick = onSelectGlobal,
@@ -55,11 +57,12 @@ fun LibraryDrawer(
                     }
                     item { HorizontalDivider(Modifier.padding(vertical = 8.dp)) }
                     items(savedFolders, key = { it.treeUri }) { folder ->
+                        val unavailable = folder.treeUri in unavailableTreeUris
                         NavigationDrawerItem(
-                            icon = { Icon(Icons.Filled.PlayArrow, contentDescription = null) },
-                            label = { Text(folder.displayName) },
-                            selected = activeSource == LibrarySourceId.Folder(folder.treeUri),
-                            onClick = { onSelectFolder(folder) },
+                            icon = { Icon(Icons.Filled.Folder, contentDescription = null) },
+                            label = { Text(if (unavailable) "${folder.displayName} (unavailable)" else folder.displayName) },
+                            selected = !unavailable && activeSource == LibrarySourceId.Folder(folder.treeUri),
+                            onClick = { if (unavailable) onAddFolder() else onSelectFolder(folder) },
                             badge = {
                                 IconButton(onClick = { onRemoveFolder(folder) }) {
                                     Icon(Icons.Filled.Close, contentDescription = "Remove ${folder.displayName}")

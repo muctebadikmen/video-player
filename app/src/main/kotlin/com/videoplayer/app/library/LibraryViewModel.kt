@@ -96,8 +96,8 @@ class LibraryViewModel(
             )
         }.stateIn(viewModelScope, SharingStarted.Eagerly, LibraryUiState())
 
-    fun refresh() = viewModelScope.launch {
-        sourceManager.refreshActive(uiState.value.activeSource); loading.value = false
+    fun refresh() {
+        viewModelScope.launch { sourceManager.refreshActive(uiState.value.activeSource); loading.value = false }
     }
     fun selectSource(id: LibrarySourceId) = viewModelScope.launch {
         sourceManager.selectSource(id); sourceManager.refreshActive(id)

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package com.videoplayer.app
 
+import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -108,10 +109,39 @@ fun VideoPlayerApp(
             val drawerState = rememberDrawerState(DrawerValue.Closed)
             val scope = rememberCoroutineScope()
             val context = LocalContext.current
+            // Track which persisted URI grants are currently active. Initialized synchronously to
+            // avoid an initial "everything unavailable" flicker, then refreshed when the drawer
+            // opens or the saved-folder list changes.
+            var persistedUris by remember {
+                mutableStateOf(
+                    context.contentResolver.persistedUriPermissions
+                        .filter { it.isReadPermission }
+                        .map { it.uri.toString() }
+                        .toSet()
+                )
+            }
+            LaunchedEffect(drawerState.isOpen, uiState.savedFolders) {
+                persistedUris = context.contentResolver.persistedUriPermissions
+                    .filter { it.isReadPermission }
+                    .map { it.uri.toString() }
+                    .toSet()
+            }
+            // If the active source points at a folder whose grant has been revoked, fall back to
+            // All videos so the user never lands on a silent empty scoped view.
+            LaunchedEffect(persistedUris) {
+                val active = uiState.activeSource
+                if (active is LibrarySourceId.Folder && active.treeUri !in persistedUris) {
+                    libraryViewModel.selectSource(LibrarySourceId.Global)
+                }
+            }
+            val unavailableTreeUris = uiState.savedFolders
+                .map { it.treeUri }
+                .filterNot { it in persistedUris }
+                .toSet()
             val pickFolder = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
                 if (uri != null) {
                     context.contentResolver.takePersistableUriPermission(
-                        uri, android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                        uri, Intent.FLAG_GRANT_READ_URI_PERMISSION,
                     )
                     val name = uri.lastPathSegment
                         ?.substringAfterLast('/')
@@ -137,7 +167,16 @@ fun VideoPlayerApp(
                     scope.launch { drawerState.close() }
                 },
                 onAddFolder = { pickFolder.launch(null) },
-                onRemoveFolder = { f -> libraryViewModel.removeFolder(f.treeUri) },
+                onRemoveFolder = { f ->
+                    runCatching {
+                        context.contentResolver.releasePersistableUriPermission(
+                            Uri.parse(f.treeUri),
+                            Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                        )
+                    }
+                    libraryViewModel.removeFolder(f.treeUri)
+                },
+                unavailableTreeUris = unavailableTreeUris,
             ) {
                 Scaffold { innerPadding ->
                     LibraryScreen(

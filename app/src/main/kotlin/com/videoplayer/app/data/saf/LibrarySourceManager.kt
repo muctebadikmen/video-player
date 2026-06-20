@@ -37,6 +37,9 @@ class LibrarySourceManager(
 
     suspend fun addFolder(folder: SavedFolder) = store.addFolder(folder)
 
+    // Note: releasePersistableUriPermission is intentionally NOT called here — this class is
+    // Context-free by design. The app layer (VideoPlayerApp.kt) owns full teardown including
+    // releasing the persistable URI permission before delegating to this method.
     suspend fun removeFolder(treeUri: String) {
         folderRepos.remove(treeUri)
         store.removeFolder(treeUri)
