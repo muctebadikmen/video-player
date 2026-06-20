@@ -4,9 +4,11 @@ package com.videoplayer.app.library
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.videoplayer.app.data.memory.MemorySource
+import com.videoplayer.app.data.saf.LibrarySourceId
+import com.videoplayer.app.data.saf.LibrarySourceManager
+import com.videoplayer.app.data.saf.SavedFolder
 import com.videoplayer.core.model.MediaFolder
 import com.videoplayer.core.model.MediaItem
-import com.videoplayer.core.model.MediaRepository
 import com.videoplayer.core.model.SortKey
 import com.videoplayer.core.model.SortOrder
 import com.videoplayer.core.model.allVideos
@@ -38,6 +40,8 @@ data class LibraryUiState(
     val videos: List<MediaItem> = emptyList(),
     val continueWatching: List<LibraryItemUi> = emptyList(),
     val progressByUri: Map<String, Float> = emptyMap(),
+    val savedFolders: List<SavedFolder> = emptyList(),
+    val activeSource: LibrarySourceId = LibrarySourceId.Global,
     val isLoading: Boolean = true,
 )
 
@@ -54,15 +58,28 @@ private data class Controls(
  * sort / search) into a single [LibraryUiState]. Sorting + search are applied by pure :core helpers.
  */
 class LibraryViewModel(
-    private val mediaRepository: MediaRepository,
+    private val sourceManager: LibrarySourceManager,
     memorySource: MemorySource,
 ) : ViewModel() {
 
     private val controls = MutableStateFlow(Controls())
     private val loading = MutableStateFlow(true)
 
+    private data class Sources(
+        val folders: List<MediaFolder>,
+        val saved: List<SavedFolder>,
+        val active: LibrarySourceId,
+    )
+
+    private val sources = combine(
+        sourceManager.activeFolders(),
+        sourceManager.savedFolders,
+        sourceManager.activeSource,
+    ) { folders, saved, active -> Sources(folders, saved, active) }
+
     val uiState: StateFlow<LibraryUiState> =
-        combine(mediaRepository.observeFolders(), memorySource.observeAll(), controls, loading) { folders, memory, c, isLoading ->
+        combine(sources, memorySource.observeAll(), controls, loading) { src, memory, c, isLoading ->
+            val folders = src.folders
             val progressByUri = memory.associate { it.mediaUri to progressFraction(it.positionMs, it.durationMs) }
             val sorted = sortFoldersBy(folders, c.sortKey, c.sortOrder)
             val sortedFolders = sorted
@@ -75,11 +92,22 @@ class LibraryViewModel(
             LibraryUiState(
                 tab = c.tab, viewMode = c.viewMode, sortKey = c.sortKey, sortOrder = c.sortOrder, query = c.query,
                 folders = sortedFolders, videos = videos, continueWatching = cw, progressByUri = progressByUri,
-                isLoading = isLoading,
+                savedFolders = src.saved, activeSource = src.active, isLoading = isLoading,
             )
         }.stateIn(viewModelScope, SharingStarted.Eagerly, LibraryUiState())
 
-    fun refresh() { viewModelScope.launch { mediaRepository.refresh(); loading.value = false } }
+    fun refresh() {
+        viewModelScope.launch { sourceManager.refreshActive(uiState.value.activeSource); loading.value = false }
+    }
+    fun selectSource(id: LibrarySourceId) = viewModelScope.launch {
+        sourceManager.selectSource(id); sourceManager.refreshActive(id)
+    }.let {}
+    fun addFolder(folder: SavedFolder) = viewModelScope.launch {
+        sourceManager.addFolder(folder)
+        sourceManager.selectSource(LibrarySourceId.Folder(folder.treeUri))
+        sourceManager.refreshActive(LibrarySourceId.Folder(folder.treeUri))
+    }.let {}
+    fun removeFolder(treeUri: String) = viewModelScope.launch { sourceManager.removeFolder(treeUri) }.let {}
     fun setTab(tab: LibraryTab) { controls.value = controls.value.copy(tab = tab) }
     fun setViewMode(mode: ViewMode) { controls.value = controls.value.copy(viewMode = mode) }
     fun setSort(key: SortKey, order: SortOrder) { controls.value = controls.value.copy(sortKey = key, sortOrder = order) }
