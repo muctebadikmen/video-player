@@ -31,6 +31,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
@@ -87,6 +88,8 @@ fun LibraryScreen(
     viewModel: LibraryViewModel,
     onItemClick: (MediaItem) -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenDrawer: () -> Unit = {},
+    scopeName: String? = null,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -119,6 +122,8 @@ fun LibraryScreen(
                 viewModel.setViewMode(if (state.viewMode == ViewMode.LIST) ViewMode.GRID else ViewMode.LIST)
             },
             onOpenSettings = onOpenSettings,
+            onOpenDrawer = onOpenDrawer,
+            scopeName = scopeName,
         )
         val hasAnyItems = state.folders.isNotEmpty() || state.videos.isNotEmpty() || state.continueWatching.isNotEmpty()
         when (libraryBodyState(hasPermission, state.isLoading, hasAnyItems)) {
@@ -177,8 +182,28 @@ private fun LibraryTopBar(
     viewMode: ViewMode,
     onToggleViewMode: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenDrawer: () -> Unit = {},
+    scopeName: String? = null,
 ) {
     var sortMenuExpanded by remember { mutableStateOf(false) }
+
+    if (scopeName != null) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = scopeName,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(start = 4.dp),
+            )
+        }
+    }
 
     Row(
         modifier = Modifier
@@ -186,6 +211,9 @@ private fun LibraryTopBar(
             .padding(horizontal = 8.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        IconButton(onClick = onOpenDrawer) {
+            Icon(Icons.Default.Menu, contentDescription = "Open navigation drawer")
+        }
         TextField(
             value = query,
             onValueChange = onQueryChange,
