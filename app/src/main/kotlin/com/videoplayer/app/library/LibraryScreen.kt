@@ -6,7 +6,6 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -57,8 +56,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
+import coil3.compose.AsyncImage
+import coil3.request.ImageRequest
+import coil3.request.crossfade
+import coil3.video.videoFrameMillis
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -419,7 +421,6 @@ private fun ThumbnailTile(
     width: Dp,
     onClick: () -> Unit,
 ) {
-    val bitmap = rememberThumbnail(item.uri)
     Column(
         Modifier
             .width(width)
@@ -432,14 +433,7 @@ private fun ThumbnailTile(
                 .clip(RoundedCornerShape(8.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant),
         ) {
-            if (bitmap != null) {
-                Image(
-                    bitmap = bitmap.asImageBitmap(),
-                    contentDescription = item.displayName,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop,
-                )
-            }
+            VideoThumbnail(uri = item.uri, modifier = Modifier.fillMaxSize())
             if (progress > 0f) {
                 LinearProgressIndicator(
                     progress = { progress },
@@ -471,7 +465,6 @@ private fun MediaRow(
     progress: Float,
     onClick: () -> Unit,
 ) {
-    val bitmap = rememberThumbnail(mediaItem.uri)
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -488,14 +481,7 @@ private fun MediaRow(
                 .clip(RoundedCornerShape(4.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant),
         ) {
-            if (bitmap != null) {
-                Image(
-                    bitmap = bitmap.asImageBitmap(),
-                    contentDescription = mediaItem.displayName,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop,
-                )
-            }
+            VideoThumbnail(uri = mediaItem.uri, modifier = Modifier.fillMaxSize())
         }
         // Text + optional progress
         Column(Modifier.weight(1f)) {
@@ -520,4 +506,19 @@ private fun MediaRow(
             }
         }
     }
+}
+
+@Composable
+private fun VideoThumbnail(uri: String, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    AsyncImage(
+        model = ImageRequest.Builder(context)
+            .data(uri)
+            .videoFrameMillis(1_000)
+            .crossfade(true)
+            .build(),
+        contentDescription = null,
+        contentScale = ContentScale.Crop,
+        modifier = modifier,
+    )
 }
