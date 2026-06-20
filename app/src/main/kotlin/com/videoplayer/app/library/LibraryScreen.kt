@@ -11,8 +11,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
@@ -69,7 +67,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.videoplayer.core.model.MediaFolder
 import com.videoplayer.core.model.MediaItem
 import com.videoplayer.core.model.SortKey
 import com.videoplayer.core.model.SortOrder
@@ -162,7 +159,8 @@ fun LibraryScreen(
                 }
                 when (state.tab) {
                     LibraryTab.FOLDERS -> FoldersContent(
-                        folders = state.folders, viewMode = state.viewMode, gridSize = state.gridSize,
+                        folders = state.folders, gridSize = state.gridSize,
+                        query = state.query,
                         progress = state.progressByUri, onItemClick = onItemClick,
                     )
                     LibraryTab.VIDEOS -> VideosContent(
@@ -371,63 +369,10 @@ private fun VideosContent(
     }
 }
 
-// ─── Folders tab content ──────────────────────────────────────────────────────
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun FoldersContent(
-    folders: List<MediaFolder>,
-    viewMode: ViewMode,
-    gridSize: GridSize,
-    progress: Map<String, Float>,
-    onItemClick: (MediaItem) -> Unit,
-) {
-    LazyColumn {
-        folders.forEach { folder ->
-            item(key = "folder:${folder.path}") {
-                Text(
-                    text = "${folder.name} · ${folder.videoCount}",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                )
-                if (viewMode == ViewMode.GRID) {
-                    FlowRow(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp),
-                        maxItemsInEachRow = gridSize.columns,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        folder.items.forEach { item ->
-                            ThumbnailTile(
-                                item = item,
-                                progress = progress[item.uri] ?: 0f,
-                                onClick = { onItemClick(item) },
-                                modifier = Modifier.weight(1f),
-                            )
-                        }
-                    }
-                }
-            }
-            if (viewMode == ViewMode.LIST) {
-                items(folder.items, key = { "item:${it.id}" }) { item ->
-                    MediaRow(
-                        mediaItem = item,
-                        progress = progress[item.uri] ?: 0f,
-                        onClick = { onItemClick(item) },
-                    )
-                }
-            }
-        }
-    }
-}
-
 // ─── Shared item composables ──────────────────────────────────────────────────
 
 @Composable
-private fun ThumbnailTile(
+internal fun ThumbnailTile(
     item: MediaItem,
     progress: Float,
     onClick: () -> Unit,
