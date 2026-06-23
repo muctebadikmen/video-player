@@ -101,4 +101,11 @@ class ThumbnailRepositoryTest {
         r.resetToAutoNow("u")
         assertThat(dao.getByUri("u")!!.customThumbnailPath).isNull()
     }
+
+    @Test fun `ensureAuto with unresolved duration (0) does not persist a row`() = runTest {
+        val ext = FakeExtractor(listOf(FrameStats(0.4, 0.08)))
+        repo(ext, this).ensureAutoThumbnailNow("u", durationMs = 0L)
+        assertThat(dao.getByUri("u")).isNull()      // no poisoned row written
+        assertThat(ext.sampleCalls).isEqualTo(0)    // didn't even sample
+    }
 }

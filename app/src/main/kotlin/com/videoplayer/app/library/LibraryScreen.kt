@@ -464,6 +464,7 @@ internal fun ThumbnailTile(
         ) {
             VideoThumbnail(
                 uri = item.uri,
+                durationMs = item.durationMs,
                 spec = spec,
                 onEnsure = { onEnsure(item) },
                 modifier = Modifier.fillMaxSize(),
@@ -550,6 +551,7 @@ private fun MediaRow(
         ) {
             VideoThumbnail(
                 uri = mediaItem.uri,
+                durationMs = mediaItem.durationMs,
                 spec = spec,
                 onEnsure = { onEnsure(mediaItem) },
                 modifier = Modifier.fillMaxSize(),
@@ -583,15 +585,17 @@ private fun MediaRow(
 @Composable
 private fun VideoThumbnail(
     uri: String,
+    durationMs: Long,
     spec: ThumbnailSpec?,
     onEnsure: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
 
-    // Lazily compute the smart auto-default the first time an un-resolved tile appears.
-    LaunchedEffect(uri, spec == null) {
-        if (spec == null) onEnsure()
+    // Compute the smart auto-default once the duration is known. Keying on durationMs makes this
+    // re-fire when a SAF item's duration resolves from 0 to its real value.
+    LaunchedEffect(uri, spec, durationMs) {
+        if (spec == null && durationMs > 0L) onEnsure()
     }
 
     Box(modifier, contentAlignment = Alignment.Center) {
