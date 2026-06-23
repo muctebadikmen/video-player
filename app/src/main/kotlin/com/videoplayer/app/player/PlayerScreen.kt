@@ -767,6 +767,19 @@ fun PlayerScreen(
                     if (state.isPlaying) engine.pause() else engine.play()
                     interactionTick++
                 },
+                onPrevious = {
+                    // Persist the outgoing position first so smart-resume stays correct
+                    // when navigating between videos (engine owns the 3s restart threshold).
+                    saveNow()
+                    engine.seekToPrevious()
+                    interactionTick++
+                },
+                onNext = {
+                    saveNow()
+                    engine.seekToNext()
+                    interactionTick++
+                },
+                hasNext = state.currentMediaIndex < playlist.lastIndex,
                 onSeekTo = { target ->
                     engine.seekTo(target)
                     interactionTick++
