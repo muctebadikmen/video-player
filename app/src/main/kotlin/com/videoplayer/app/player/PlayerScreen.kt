@@ -709,27 +709,35 @@ fun PlayerScreen(
                         .pointerInput(Unit) {
                             awaitEachGesture {
                                 awaitFirstDown(requireUnconsumed = false)
+                                var adjusted = false
                                 do {
                                     val event = awaitPointerEvent()
-                                    val zoom = event.calculateZoom()
-                                    val panY = event.calculatePan().y
-                                    var changed = false
-                                    if (zoom != 1f) {
-                                        subtitleSizeFraction = applySubtitleSize(subtitleSizeFraction, zoom)
-                                        changed = true
+                                    // Two-finger only: single-finger drags fall through to the
+                                    // brightness/volume/seek gestures on the surface below.
+                                    if (event.changes.count { it.pressed } >= 2) {
+                                        val zoom = event.calculateZoom()
+                                        val panY = event.calculatePan().y
+                                        var changed = false
+                                        if (zoom != 1f) {
+                                            subtitleSizeFraction = applySubtitleSize(subtitleSizeFraction, zoom)
+                                            changed = true
+                                        }
+                                        if (panY != 0f) {
+                                            subtitleBottomPadding =
+                                                applySubtitleBottomPadding(subtitleBottomPadding, panY, hPx)
+                                            changed = true
+                                        }
+                                        if (changed) {
+                                            event.changes.forEach { it.consume() }
+                                            adjusted = true
+                                        }
                                     }
-                                    if (panY != 0f) {
-                                        subtitleBottomPadding =
-                                            applySubtitleBottomPadding(subtitleBottomPadding, panY, hPx)
-                                        changed = true
-                                    }
-                                    // Only consume when we actually adjusted, so taps and pure
-                                    // horizontal drags fall through (toggle controls / seek).
-                                    if (changed) event.changes.forEach { it.consume() }
                                 } while (event.changes.any { it.pressed })
-                                scope.launch {
-                                    settingsRepo.setSubtitleSizeFraction(subtitleSizeFraction)
-                                    settingsRepo.setSubtitleBottomPaddingFraction(subtitleBottomPadding)
+                                if (adjusted) {
+                                    scope.launch {
+                                        settingsRepo.setSubtitleSizeFraction(subtitleSizeFraction)
+                                        settingsRepo.setSubtitleBottomPaddingFraction(subtitleBottomPadding)
+                                    }
                                 }
                             }
                         },

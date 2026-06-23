@@ -110,6 +110,12 @@ fun SettingsScreen(onBack: () -> Unit) {
                 value = subPos, valueRange = SUBTITLE_POS_MIN..SUBTITLE_POS_MAX, steps = 0,
                 onValueChange = vm::setSubtitlePosition,
             )
+            Text(
+                "Tip: two-finger drag on the video moves subtitles; pinch to resize.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+            )
             SubtitlePreview(style = subStyle, sizeFraction = subSize)
             HorizontalDivider()
             OpenSubtitlesSettings(
