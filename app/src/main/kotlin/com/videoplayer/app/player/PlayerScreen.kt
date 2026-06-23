@@ -32,6 +32,8 @@ import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import com.videoplayer.app.player.gestures.boostSpeedForPointers
 import com.videoplayer.app.player.gestures.DEFAULT_HOLD_SPEED_ONE
 import com.videoplayer.app.player.gestures.DEFAULT_HOLD_SPEED_TWO
+import com.videoplayer.app.player.gestures.DEFAULT_SUBTITLE_SIZE_FRACTION
+import com.videoplayer.app.player.gestures.DEFAULT_SUBTITLE_BOTTOM_PADDING
 import com.videoplayer.app.player.gestures.formatSpeedLabel
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -73,6 +75,9 @@ import com.videoplayer.app.data.memory.settingsDataStore
 import com.videoplayer.app.engine.Media3PlaybackEngine
 import com.videoplayer.app.player.controls.DoubleTapAction
 import com.videoplayer.app.player.subtitle.CueOverlay
+import com.videoplayer.app.player.subtitle.SubtitleStyle
+import com.videoplayer.app.player.subtitle.captionStyleCompatFor
+import com.videoplayer.app.player.subtitle.subtitleStyleSpec
 import com.videoplayer.app.player.subtitle.SiblingSubtitleScanner
 import com.videoplayer.app.player.subtitle.SubtitleLoader
 import com.videoplayer.app.player.subtitle.SubtitleOption
@@ -155,6 +160,14 @@ fun PlayerScreen(
     val holdSpeedTwo by settingsRepo.holdSpeedTwoFinger.collectAsStateWithLifecycle(initialValue = DEFAULT_HOLD_SPEED_TWO)
     val holdOneState = rememberUpdatedState(holdSpeedOne)
     val holdTwoState = rememberUpdatedState(holdSpeedTwo)
+    val subtitleStylePref by settingsRepo.subtitleStyle.collectAsStateWithLifecycle(initialValue = SubtitleStyle.OUTLINE)
+    var subtitleSizeFraction by remember { mutableFloatStateOf(DEFAULT_SUBTITLE_SIZE_FRACTION) }
+    var subtitleBottomPadding by remember { mutableFloatStateOf(DEFAULT_SUBTITLE_BOTTOM_PADDING) }
+    // Seed the local (drag-mutable) state from prefs once they emit.
+    val sizePref by settingsRepo.subtitleSizeFraction.collectAsStateWithLifecycle(initialValue = DEFAULT_SUBTITLE_SIZE_FRACTION)
+    val posPref by settingsRepo.subtitleBottomPaddingFraction.collectAsStateWithLifecycle(initialValue = DEFAULT_SUBTITLE_BOTTOM_PADDING)
+    LaunchedEffect(sizePref) { subtitleSizeFraction = sizePref }
+    LaunchedEffect(posPref) { subtitleBottomPadding = posPref }
     val state by engine.state.collectAsStateWithLifecycle()
     val startIndex = remember(playlist, startUri) { startIndexFor(playlist.map { it.uri }, startUri) }
     val currentItem = playlist.getOrElse(state.currentMediaIndex) {
@@ -650,6 +663,18 @@ fun PlayerScreen(
                         view.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
                     }
                 }
+                view.subtitleView?.let { sv ->
+                    if (subtitleStylePref == SubtitleStyle.SYSTEM) {
+                        sv.setApplyEmbeddedStyles(true)
+                        sv.setUserDefaultStyle()
+                        sv.setUserDefaultTextSize()
+                    } else {
+                        sv.setApplyEmbeddedStyles(false)
+                        sv.setStyle(captionStyleCompatFor(subtitleStyleSpec(subtitleStylePref)))
+                        sv.setFractionalTextSize(subtitleSizeFraction)
+                    }
+                    sv.setBottomPaddingFraction(subtitleBottomPadding)
+                }
             },
             onRelease = { view ->
                 view.player = null
@@ -800,10 +825,10 @@ fun PlayerScreen(
         if (!inPip) {
             CueOverlay(
                 text = activeCueText(subtitleCues, state.positionMs, subtitleOffsetMs, subtitleRate.toDouble()),
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .navigationBarsPadding()
-                    .padding(start = 24.dp, end = 24.dp, bottom = 72.dp),
+                style = subtitleStylePref,
+                sizeFraction = subtitleSizeFraction,
+                bottomPaddingFraction = subtitleBottomPadding,
+                modifier = Modifier.fillMaxSize().navigationBarsPadding(),
             )
         }
 
