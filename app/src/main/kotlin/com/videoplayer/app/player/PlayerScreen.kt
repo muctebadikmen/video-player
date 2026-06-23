@@ -26,6 +26,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.awaitLongPressOrCancellation
+import androidx.compose.foundation.gestures.calculatePan
 import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -690,6 +691,52 @@ fun PlayerScreen(
             },
         )
 
+        // Subtitle adjust layer: drag to move (pan.y), pinch to resize (zoom). One gesture
+        // handler avoids two detectors racing. Placed BEFORE the controls below so the seek
+        // bar/buttons (drawn on top) always win their own touches; only active while controls
+        // are visible so it never competes with the hold-to-speed gesture on the bare surface.
+        if (!inPip && controlsVisible) {
+            BoxWithConstraints(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .fillMaxHeight(0.5f),
+            ) {
+                val hPx = constraints.maxHeight.toFloat()
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .pointerInput(Unit) {
+                            awaitEachGesture {
+                                awaitFirstDown(requireUnconsumed = false)
+                                do {
+                                    val event = awaitPointerEvent()
+                                    val zoom = event.calculateZoom()
+                                    val panY = event.calculatePan().y
+                                    var changed = false
+                                    if (zoom != 1f) {
+                                        subtitleSizeFraction = applySubtitleSize(subtitleSizeFraction, zoom)
+                                        changed = true
+                                    }
+                                    if (panY != 0f) {
+                                        subtitleBottomPadding =
+                                            applySubtitleBottomPadding(subtitleBottomPadding, panY, hPx)
+                                        changed = true
+                                    }
+                                    // Only consume when we actually adjusted, so taps and pure
+                                    // horizontal drags fall through (toggle controls / seek).
+                                    if (changed) event.changes.forEach { it.consume() }
+                                } while (event.changes.any { it.pressed })
+                                scope.launch {
+                                    settingsRepo.setSubtitleSizeFraction(subtitleSizeFraction)
+                                    settingsRepo.setSubtitleBottomPaddingFraction(subtitleBottomPadding)
+                                }
+                            }
+                        },
+                )
+            }
+        }
+
         AnimatedVisibility(
             visible = controlsVisible && !inPip,
             enter = fadeIn(),
@@ -838,45 +885,6 @@ fun PlayerScreen(
                 bottomPaddingFraction = subtitleBottomPadding,
                 modifier = Modifier.fillMaxSize().navigationBarsPadding(),
             )
-        }
-
-        if (!inPip && controlsVisible) {
-            BoxWithConstraints(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .fillMaxHeight(0.5f) // lower half = subtitle adjust zone
-            ) {
-                val hPx = constraints.maxHeight.toFloat()
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .pointerInput(Unit) {
-                            // Vertical drag → move; persist on end.
-                            detectVerticalDragGestures(
-                                onDragEnd = { scope.launch { settingsRepo.setSubtitleBottomPaddingFraction(subtitleBottomPadding) } },
-                            ) { change, dragAmount ->
-                                change.consume()
-                                subtitleBottomPadding = applySubtitleBottomPadding(subtitleBottomPadding, dragAmount, hPx)
-                            }
-                        }
-                        .pointerInput(Unit) {
-                            // Pinch → resize; persist on end.
-                            awaitEachGesture {
-                                awaitFirstDown(requireUnconsumed = false)
-                                do {
-                                    val event = awaitPointerEvent()
-                                    val zoom = event.calculateZoom()
-                                    if (zoom != 1f) {
-                                        subtitleSizeFraction = applySubtitleSize(subtitleSizeFraction, zoom)
-                                        event.changes.forEach { it.consume() }
-                                    }
-                                } while (event.changes.any { it.pressed })
-                                scope.launch { settingsRepo.setSubtitleSizeFraction(subtitleSizeFraction) }
-                            }
-                        },
-                )
-            }
         }
 
         if (showSearchSheet && !inPip) {
