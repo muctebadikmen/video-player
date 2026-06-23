@@ -5,6 +5,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.videoplayer.app.data.memory.GridSizePreferences
 import com.videoplayer.app.data.memory.MemorySource
+import com.videoplayer.app.thumbnail.ThumbnailController
+import com.videoplayer.app.thumbnail.ThumbnailSpec
+import com.videoplayer.app.thumbnail.toSpec
 import com.videoplayer.app.data.saf.LibrarySourceId
 import com.videoplayer.app.data.saf.LibrarySourceManager
 import com.videoplayer.app.data.saf.SavedFolder
@@ -44,6 +47,7 @@ data class LibraryUiState(
     val videos: List<MediaItem> = emptyList(),
     val continueWatching: List<LibraryItemUi> = emptyList(),
     val progressByUri: Map<String, Float> = emptyMap(),
+    val thumbnailByUri: Map<String, ThumbnailSpec> = emptyMap(),
     val savedFolders: List<SavedFolder> = emptyList(),
     val activeSource: LibrarySourceId = LibrarySourceId.Global,
     val isLoading: Boolean = true,
@@ -65,6 +69,7 @@ private data class Controls(
 class LibraryViewModel(
     private val sourceManager: LibrarySourceManager,
     memorySource: MemorySource,
+    private val thumbnails: ThumbnailController,
     private val settings: GridSizePreferences,
 ) : ViewModel() {
 
@@ -92,9 +97,10 @@ class LibraryViewModel(
     ) { folders, saved, active -> Sources(folders, saved, active) }
 
     val uiState: StateFlow<LibraryUiState> =
-        combine(sources, memorySource.observeAll(), controls, loading) { src, memory, c, isLoading ->
+        combine(sources, memorySource.observeAll(), thumbnails.observeAll(), controls, loading) { src, memory, thumbs, c, isLoading ->
             val folders = src.folders
             val progressByUri = memory.associate { it.mediaUri to progressFraction(it.positionMs, it.durationMs) }
+            val thumbnailByUri = thumbs.mapNotNull { t -> t.toSpec()?.let { t.mediaUri to it } }.toMap()
             val sorted = sortFoldersBy(folders, c.sortKey, c.sortOrder)
             val sortedFolders = sorted
                 .map { it.copy(items = searchItems(it.items, c.query)) }
@@ -107,6 +113,7 @@ class LibraryViewModel(
                 tab = c.tab, viewMode = c.viewMode, sortKey = c.sortKey, sortOrder = c.sortOrder, query = c.query,
                 gridSize = c.gridSize,
                 folders = sortedFolders, videos = videos, continueWatching = cw, progressByUri = progressByUri,
+                thumbnailByUri = thumbnailByUri,
                 savedFolders = src.saved, activeSource = src.active, isLoading = isLoading,
             )
         }.stateIn(viewModelScope, SharingStarted.Eagerly, LibraryUiState())
@@ -123,6 +130,10 @@ class LibraryViewModel(
         sourceManager.refreshActive(LibrarySourceId.Folder(folder.treeUri))
     }.let {}
     fun removeFolder(treeUri: String) = viewModelScope.launch { sourceManager.removeFolder(treeUri) }.let {}
+    fun ensureThumbnail(mediaUri: String, durationMs: Long) = thumbnails.ensureAutoThumbnail(mediaUri, durationMs)
+    fun setCustomThumbnailFromFrame(mediaUri: String, frameMs: Long) = thumbnails.setCustomThumbnailFromFrame(mediaUri, frameMs)
+    fun resetThumbnail(mediaUri: String) = thumbnails.resetToAuto(mediaUri)
+
     fun setTab(tab: LibraryTab) { controls.value = controls.value.copy(tab = tab) }
     fun setViewMode(mode: ViewMode) { controls.value = controls.value.copy(viewMode = mode) }
     fun setSort(key: SortKey, order: SortOrder) { controls.value = controls.value.copy(sortKey = key, sortOrder = order) }
