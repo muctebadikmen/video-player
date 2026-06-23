@@ -59,6 +59,11 @@ class ThumbnailRepository(
         val existing = dao.getByUri(mediaUri)
         if (existing?.autoResolved == true || existing?.customThumbnailPath != null) return
 
+        // Duration not resolved yet (SAF folders emit items with durationMs=0 before resolving).
+        // Skip so we don't poison the row with autoFrameMs=0; the UI re-triggers ensure once the
+        // real duration arrives.
+        if (durationMs <= 0L) return
+
         // Dedup concurrent compute for the same uri.
         inFlightLock.withLock {
             if (mediaUri in inFlight) return
