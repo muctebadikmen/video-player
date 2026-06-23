@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package com.videoplayer.app.player.gestures
 
+import kotlin.math.roundToInt
+
 /** Volume can be boosted to 200% of system max (1.0 = system max). */
 const val MAX_VOLUME_FACTOR = 2f
 
 /** A full-width horizontal drag scrubs this many ms. Tunable (sensitivity). */
 const val SEEK_MS_PER_WIDTH = 90_000L
-
-/** Playback speed applied while the long-press is held. */
-const val BOOST_SPEED = 2f
 
 /** Which vertical gesture a touch controls, decided by screen half. */
 enum class VerticalSide { BRIGHTNESS, VOLUME }
@@ -43,3 +42,47 @@ fun horizontalSeekDeltaMs(dragXpx: Float, widthPx: Float): Long {
     if (widthPx <= 0f) return 0L
     return ((dragXpx / widthPx) * SEEK_MS_PER_WIDTH).toLong()
 }
+
+// --- Hold-to-speed (configurable one/two-finger) ---
+
+const val HOLD_SPEED_MIN = 1.0f
+const val HOLD_SPEED_MAX = 4.0f
+const val DEFAULT_HOLD_SPEED_ONE = 2.0f
+const val DEFAULT_HOLD_SPEED_TWO = 3.0f
+
+/** Boost speed for the number of fingers currently held (>=2 fingers → two-finger speed). */
+fun boostSpeedForPointers(pressedCount: Int, oneFinger: Float, twoFinger: Float): Float =
+    if (pressedCount >= 2) twoFinger else oneFinger
+
+/** Compact label for the speed badge: "2×", "2.5×" (one decimal, trailing .0 dropped). */
+fun formatSpeedLabel(speed: Float): String {
+    val rounded = (speed * 10f).roundToInt() / 10f
+    val text = if (rounded % 1f == 0f) rounded.toInt().toString() else rounded.toString()
+    return "$text×"
+}
+
+fun clampHoldSpeed(speed: Float): Float = speed.coerceIn(HOLD_SPEED_MIN, HOLD_SPEED_MAX)
+
+// --- Subtitle size & position (fractions of player height) ---
+
+const val SUBTITLE_SIZE_MIN = 0.04f
+const val SUBTITLE_SIZE_MAX = 0.10f
+const val DEFAULT_SUBTITLE_SIZE_FRACTION = 0.0533f
+
+const val SUBTITLE_POS_MIN = 0.02f
+const val SUBTITLE_POS_MAX = 0.50f
+const val DEFAULT_SUBTITLE_BOTTOM_PADDING = 0.08f
+
+fun clampSubtitleSize(fraction: Float): Float = fraction.coerceIn(SUBTITLE_SIZE_MIN, SUBTITLE_SIZE_MAX)
+
+fun clampSubtitleBottomPadding(fraction: Float): Float =
+    fraction.coerceIn(SUBTITLE_POS_MIN, SUBTITLE_POS_MAX)
+
+/** New bottom-padding fraction after a vertical drag; dragging **up** (negative dy) raises it. */
+fun applySubtitleBottomPadding(current: Float, dragYpx: Float, heightPx: Float): Float {
+    if (heightPx <= 0f) return current
+    return clampSubtitleBottomPadding(current - dragYpx / heightPx)
+}
+
+/** New size fraction after a pinch; [zoom] > 1 grows the text. */
+fun applySubtitleSize(current: Float, zoom: Float): Float = clampSubtitleSize(current * zoom)

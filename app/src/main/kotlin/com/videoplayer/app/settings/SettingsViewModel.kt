@@ -10,6 +10,11 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.videoplayer.app.data.memory.SettingsRepository
 import com.videoplayer.app.data.memory.settingsDataStore
 import com.videoplayer.app.data.opensubtitles.OpenSubtitlesClient
+import com.videoplayer.app.player.gestures.DEFAULT_HOLD_SPEED_ONE
+import com.videoplayer.app.player.gestures.DEFAULT_HOLD_SPEED_TWO
+import com.videoplayer.app.player.gestures.DEFAULT_SUBTITLE_BOTTOM_PADDING
+import com.videoplayer.app.player.gestures.DEFAULT_SUBTITLE_SIZE_FRACTION
+import com.videoplayer.app.player.subtitle.SubtitleStyle
 import com.videoplayer.app.data.opensubtitles.OpenSubtitlesCredentials
 import com.videoplayer.app.data.opensubtitles.OpenSubtitlesCredentialsRepository
 import com.videoplayer.app.data.opensubtitles.OsError
@@ -33,6 +38,23 @@ class SettingsViewModel(
     fun setBackgroundPlayback(enabled: Boolean) {
         viewModelScope.launch { repo.setBackgroundPlaybackEnabled(enabled) }
     }
+
+    val holdSpeedOneFinger: StateFlow<Float> =
+        repo.holdSpeedOneFinger.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DEFAULT_HOLD_SPEED_ONE)
+    val holdSpeedTwoFinger: StateFlow<Float> =
+        repo.holdSpeedTwoFinger.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DEFAULT_HOLD_SPEED_TWO)
+    val subtitleStyle: StateFlow<SubtitleStyle> =
+        repo.subtitleStyle.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SubtitleStyle.OUTLINE)
+    val subtitleSizeFraction: StateFlow<Float> =
+        repo.subtitleSizeFraction.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DEFAULT_SUBTITLE_SIZE_FRACTION)
+    val subtitleBottomPaddingFraction: StateFlow<Float> =
+        repo.subtitleBottomPaddingFraction.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DEFAULT_SUBTITLE_BOTTOM_PADDING)
+
+    fun setHoldSpeedOneFinger(v: Float) { viewModelScope.launch { repo.setHoldSpeedOneFinger(v) } }
+    fun setHoldSpeedTwoFinger(v: Float) { viewModelScope.launch { repo.setHoldSpeedTwoFinger(v) } }
+    fun setSubtitleStyle(s: SubtitleStyle) { viewModelScope.launch { repo.setSubtitleStyle(s) } }
+    fun setSubtitleSize(v: Float) { viewModelScope.launch { repo.setSubtitleSizeFraction(v) } }
+    fun setSubtitlePosition(v: Float) { viewModelScope.launch { repo.setSubtitleBottomPaddingFraction(v) } }
 
     val osCredentials: StateFlow<OpenSubtitlesCredentials> =
         osRepo.credentials.stateIn(

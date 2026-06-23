@@ -26,13 +26,23 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.awaitLongPressOrCancellation
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
-import androidx.compose.foundation.gestures.waitForUpOrCancellation
+import com.videoplayer.app.player.gestures.boostSpeedForPointers
+import com.videoplayer.app.player.gestures.DEFAULT_HOLD_SPEED_ONE
+import com.videoplayer.app.player.gestures.DEFAULT_HOLD_SPEED_TWO
+import com.videoplayer.app.player.gestures.DEFAULT_SUBTITLE_SIZE_FRACTION
+import com.videoplayer.app.player.gestures.DEFAULT_SUBTITLE_BOTTOM_PADDING
+import com.videoplayer.app.player.gestures.formatSpeedLabel
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -57,6 +67,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -70,6 +81,9 @@ import com.videoplayer.app.data.memory.settingsDataStore
 import com.videoplayer.app.engine.Media3PlaybackEngine
 import com.videoplayer.app.player.controls.DoubleTapAction
 import com.videoplayer.app.player.subtitle.CueOverlay
+import com.videoplayer.app.player.subtitle.SubtitleStyle
+import com.videoplayer.app.player.subtitle.captionStyleCompatFor
+import com.videoplayer.app.player.subtitle.subtitleStyleSpec
 import com.videoplayer.app.player.subtitle.SiblingSubtitleScanner
 import com.videoplayer.app.player.subtitle.SubtitleLoader
 import com.videoplayer.app.player.subtitle.SubtitleOption
@@ -80,9 +94,10 @@ import com.videoplayer.app.player.controls.doubleTapAction
 import com.videoplayer.app.player.controls.resolveTapZone
 import com.videoplayer.app.player.controls.seekTarget
 import com.videoplayer.app.player.gestures.AspectMode
-import com.videoplayer.app.player.gestures.BOOST_SPEED
 import com.videoplayer.app.player.gestures.VerticalSide
 import com.videoplayer.app.player.gestures.applyBrightness
+import com.videoplayer.app.player.gestures.applySubtitleBottomPadding
+import com.videoplayer.app.player.gestures.applySubtitleSize
 import com.videoplayer.app.player.gestures.applyVolumeFactor
 import com.videoplayer.app.player.gestures.displayLabel
 import com.videoplayer.app.player.gestures.horizontalSeekDeltaMs
@@ -148,7 +163,20 @@ fun PlayerScreen(
     val activity = remember(context) { context.findActivity() }
     val engine = remember { Media3PlaybackEngine(context) }
     val settingsRepo = remember(context) { SettingsRepository(context.applicationContext.settingsDataStore) }
+    val scope = rememberCoroutineScope()
     val backgroundEnabled by settingsRepo.backgroundPlaybackEnabled.collectAsStateWithLifecycle(initialValue = true)
+    val holdSpeedOne by settingsRepo.holdSpeedOneFinger.collectAsStateWithLifecycle(initialValue = DEFAULT_HOLD_SPEED_ONE)
+    val holdSpeedTwo by settingsRepo.holdSpeedTwoFinger.collectAsStateWithLifecycle(initialValue = DEFAULT_HOLD_SPEED_TWO)
+    val holdOneState = rememberUpdatedState(holdSpeedOne)
+    val holdTwoState = rememberUpdatedState(holdSpeedTwo)
+    val subtitleStylePref by settingsRepo.subtitleStyle.collectAsStateWithLifecycle(initialValue = SubtitleStyle.OUTLINE)
+    var subtitleSizeFraction by remember { mutableFloatStateOf(DEFAULT_SUBTITLE_SIZE_FRACTION) }
+    var subtitleBottomPadding by remember { mutableFloatStateOf(DEFAULT_SUBTITLE_BOTTOM_PADDING) }
+    // Seed the local (drag-mutable) state from prefs once they emit.
+    val sizePref by settingsRepo.subtitleSizeFraction.collectAsStateWithLifecycle(initialValue = DEFAULT_SUBTITLE_SIZE_FRACTION)
+    val posPref by settingsRepo.subtitleBottomPaddingFraction.collectAsStateWithLifecycle(initialValue = DEFAULT_SUBTITLE_BOTTOM_PADDING)
+    LaunchedEffect(sizePref) { subtitleSizeFraction = sizePref }
+    LaunchedEffect(posPref) { subtitleBottomPadding = posPref }
     val state by engine.state.collectAsStateWithLifecycle()
     val startIndex = remember(playlist, startUri) { startIndexFor(playlist.map { it.uri }, startUri) }
     val currentItem = playlist.getOrElse(state.currentMediaIndex) {
@@ -188,6 +216,7 @@ fun PlayerScreen(
     var gestureLabel by remember { mutableStateOf<String?>(null) }
     var gestureSeq by remember { mutableIntStateOf(0) }
     var speedBoostActive by remember { mutableStateOf(false) }
+    var speedBoostLabel by remember { mutableStateOf("") }
     var aspectMode by remember { mutableStateOf(AspectMode.FIT) }
 
     // P1.E-2: Kids Lock + per-file orientation override.
@@ -580,11 +609,30 @@ fun PlayerScreen(
                     val down = awaitFirstDown(requireUnconsumed = false)
                     if (awaitLongPressOrCancellation(down.id) != null) {
                         val previousSpeed = engine.state.value.speed
-                        engine.setSpeed(BOOST_SPEED)
-                        speedBoostActive = true
-                        waitForUpOrCancellation()
-                        engine.setSpeed(previousSpeed)
-                        speedBoostActive = false
+                        try {
+                            var pressed = currentEvent.changes.count { it.pressed }.coerceAtLeast(1)
+                            var applied = boostSpeedForPointers(pressed, holdOneState.value, holdTwoState.value)
+                            engine.setSpeed(applied)
+                            speedBoostLabel = formatSpeedLabel(applied)
+                            speedBoostActive = true
+                            // Track finger-count changes live until every pointer lifts.
+                            while (true) {
+                                val event = awaitPointerEvent()
+                                pressed = event.changes.count { it.pressed }
+                                if (pressed == 0) break
+                                val next = boostSpeedForPointers(pressed, holdOneState.value, holdTwoState.value)
+                                if (next != applied) {
+                                    applied = next
+                                    engine.setSpeed(applied)
+                                    speedBoostLabel = formatSpeedLabel(applied)
+                                }
+                            }
+                        } finally {
+                            // Always restore speed and clear the badge, even if the gesture
+                            // coroutine is cancelled mid-hold (dispose/navigation/interruption).
+                            engine.setSpeed(previousSpeed)
+                            speedBoostActive = false
+                        }
                     }
                 }
             },
@@ -624,12 +672,78 @@ fun PlayerScreen(
                         view.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
                     }
                 }
+                view.subtitleView?.let { sv ->
+                    if (subtitleStylePref == SubtitleStyle.SYSTEM) {
+                        sv.setApplyEmbeddedStyles(true)
+                        sv.setUserDefaultStyle()
+                        sv.setUserDefaultTextSize()
+                    } else {
+                        sv.setApplyEmbeddedStyles(false)
+                        sv.setStyle(captionStyleCompatFor(subtitleStyleSpec(subtitleStylePref)))
+                        sv.setFractionalTextSize(subtitleSizeFraction)
+                    }
+                    sv.setBottomPaddingFraction(subtitleBottomPadding)
+                }
             },
             onRelease = { view ->
                 view.player = null
                 engine.release()
             },
         )
+
+        // Subtitle adjust layer: drag to move (pan.y), pinch to resize (zoom). One gesture
+        // handler avoids two detectors racing. Placed BEFORE the controls below so the seek
+        // bar/buttons (drawn on top) always win their own touches; only active while controls
+        // are visible so it never competes with the hold-to-speed gesture on the bare surface.
+        if (!inPip && controlsVisible) {
+            BoxWithConstraints(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .fillMaxHeight(0.5f),
+            ) {
+                val hPx = constraints.maxHeight.toFloat()
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .pointerInput(Unit) {
+                            awaitEachGesture {
+                                awaitFirstDown(requireUnconsumed = false)
+                                var adjusted = false
+                                do {
+                                    val event = awaitPointerEvent()
+                                    // Two-finger only: single-finger drags fall through to the
+                                    // brightness/volume/seek gestures on the surface below.
+                                    if (event.changes.count { it.pressed } >= 2) {
+                                        val zoom = event.calculateZoom()
+                                        val panY = event.calculatePan().y
+                                        var changed = false
+                                        if (zoom != 1f) {
+                                            subtitleSizeFraction = applySubtitleSize(subtitleSizeFraction, zoom)
+                                            changed = true
+                                        }
+                                        if (panY != 0f) {
+                                            subtitleBottomPadding =
+                                                applySubtitleBottomPadding(subtitleBottomPadding, panY, hPx)
+                                            changed = true
+                                        }
+                                        if (changed) {
+                                            event.changes.forEach { it.consume() }
+                                            adjusted = true
+                                        }
+                                    }
+                                } while (event.changes.any { it.pressed })
+                                if (adjusted) {
+                                    scope.launch {
+                                        settingsRepo.setSubtitleSizeFraction(subtitleSizeFraction)
+                                        settingsRepo.setSubtitleBottomPaddingFraction(subtitleBottomPadding)
+                                    }
+                                }
+                            }
+                        },
+                )
+            }
+        }
 
         AnimatedVisibility(
             visible = controlsVisible && !inPip,
@@ -768,16 +882,16 @@ fun PlayerScreen(
 
         if (!inPip) {
             gestureLabel?.let { GestureOverlay(label = it) }
-            if (speedBoostActive) GestureOverlay(label = "${BOOST_SPEED.toInt()}×")
+            if (speedBoostActive) SpeedBadge(label = speedBoostLabel)
         }
 
         if (!inPip) {
             CueOverlay(
                 text = activeCueText(subtitleCues, state.positionMs, subtitleOffsetMs, subtitleRate.toDouble()),
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .navigationBarsPadding()
-                    .padding(start = 24.dp, end = 24.dp, bottom = 72.dp),
+                style = subtitleStylePref,
+                sizeFraction = subtitleSizeFraction,
+                bottomPaddingFraction = subtitleBottomPadding,
+                modifier = Modifier.fillMaxSize().navigationBarsPadding(),
             )
         }
 
