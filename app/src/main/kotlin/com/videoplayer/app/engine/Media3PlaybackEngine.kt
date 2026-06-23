@@ -272,11 +272,28 @@ class Media3PlaybackEngine(context: Context) : PlaybackEngine {
         c.prepare()
     }
 
-    // seekToNext / seekToPrevious delegate to Player, which owns the queue and the
-    // 3s maxSeekToPreviousPosition threshold (restart-current vs go-to-previous).
-    override fun seekToNext() = withController { it.seekToNext() }
+    override fun seekToNext() = withController { c ->
+        c.seekToNext()
+        // Refresh position so the seek bar reflects the new item even while paused (the
+        // position poller only runs during playback).
+        _state.update { it.copy(positionMs = c.currentPosition.coerceAtLeast(0)) }
+    }
 
-    override fun seekToPrevious() = withController { it.seekToPrevious() }
+    override fun seekToPrevious() = withController { c ->
+        // Enforce the standard 3s threshold here: via the MediaController, the default
+        // Player.seekToPrevious() does not honor maxSeekToPreviousPositionMs, so replicate
+        // the documented behavior using the controller's live position — within the first
+        // 3s (and not the first item) step back, otherwise restart the current item.
+        if (c.hasPreviousMediaItem() &&
+            c.currentPosition <= C.DEFAULT_MAX_SEEK_TO_PREVIOUS_POSITION_MS
+        ) {
+            c.seekToPreviousMediaItem()
+        } else {
+            c.seekTo(0)
+        }
+        // Refresh position so the seek bar updates immediately even while paused.
+        _state.update { it.copy(positionMs = c.currentPosition.coerceAtLeast(0)) }
+    }
 
     override fun setPauseAtEndOfMediaItems(enabled: Boolean) = withController { c ->
         val args = Bundle().apply { putBoolean(ARG_PAUSE_AT_END_ENABLED, enabled) }

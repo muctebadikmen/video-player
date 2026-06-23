@@ -19,22 +19,27 @@ MX Player).
 
 The player already loads the **entire folder as an ExoPlayer playlist**
 (`PlaybackEngine.setMediaPlaylist(uris, startIndex)` in
-`PlayerScreen`), and the Media3 `MediaController` **is** a `Player`. ExoPlayer's
-built-in `Player.seekToPrevious()` already implements the exact 3-second
-behavior above (`maxSeekToPreviousPositionMs`, default 3000 ms — `PlaybackService`
-does not override it). `Player.seekToNext()` jumps to the next item.
+`PlayerScreen`), and the Media3 `MediaController` **is** a `Player` — so
+`seekToNext()` and the queue are already there.
 
-So this is a small, surgical change that **delegates the behavior to the
-engine** rather than re-deriving threshold logic by hand.
+**On-device finding:** routed through a `MediaController` (the app talks to the
+service-owned player via a controller), `Player.seekToPrevious()` does **not**
+honor `maxSeekToPreviousPositionMs` — at 4 s it still stepped back instead of
+restarting. So the engine applies the 3-second decision itself, using the
+controller's live position (`C.DEFAULT_MAX_SEEK_TO_PREVIOUS_POSITION_MS` = 3000):
+within the first 3 s (and not the first item) step back, otherwise restart the
+current item. This guarantees the exact behavior the spec requires regardless of
+controller/SDK quirks.
 
 ## Changes (5 files)
 
 1. **`:core:playback` `PlaybackEngine`** — add `seekToNext()` and
    `seekToPrevious()` to the interface (engine-agnostic; libmpv can implement
    the same contract later).
-2. **`Media3PlaybackEngine`** — implement each as a one-liner delegating to the
-   controller (`withController { it.seekToNext() }` / `it.seekToPrevious()`).
-   ExoPlayer owns the 3 s threshold.
+2. **`Media3PlaybackEngine`** — `seekToNext()` delegates to the controller;
+   `seekToPrevious()` applies the 3 s threshold itself (see Key realization).
+   Both refresh `_state.positionMs` after the seek so the seek bar updates even
+   while paused (the position poller only runs during playback).
 3. **`FakePlaybackEngine`** — model the contract deterministically (track the
    playlist; next advances the index, previous restarts-or-steps-back using a
    3000 ms threshold mirroring Media3) so it stays a faithful test double.
