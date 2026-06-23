@@ -587,25 +587,30 @@ fun PlayerScreen(
                     val down = awaitFirstDown(requireUnconsumed = false)
                     if (awaitLongPressOrCancellation(down.id) != null) {
                         val previousSpeed = engine.state.value.speed
-                        var pressed = currentEvent.changes.count { it.pressed }.coerceAtLeast(1)
-                        var applied = boostSpeedForPointers(pressed, holdOneState.value, holdTwoState.value)
-                        engine.setSpeed(applied)
-                        speedBoostLabel = formatSpeedLabel(applied)
-                        speedBoostActive = true
-                        // Track finger-count changes live until every pointer lifts.
-                        while (true) {
-                            val event = awaitPointerEvent()
-                            pressed = event.changes.count { it.pressed }
-                            if (pressed == 0) break
-                            val next = boostSpeedForPointers(pressed, holdOneState.value, holdTwoState.value)
-                            if (next != applied) {
-                                applied = next
-                                engine.setSpeed(applied)
-                                speedBoostLabel = formatSpeedLabel(applied)
+                        try {
+                            var pressed = currentEvent.changes.count { it.pressed }.coerceAtLeast(1)
+                            var applied = boostSpeedForPointers(pressed, holdOneState.value, holdTwoState.value)
+                            engine.setSpeed(applied)
+                            speedBoostLabel = formatSpeedLabel(applied)
+                            speedBoostActive = true
+                            // Track finger-count changes live until every pointer lifts.
+                            while (true) {
+                                val event = awaitPointerEvent()
+                                pressed = event.changes.count { it.pressed }
+                                if (pressed == 0) break
+                                val next = boostSpeedForPointers(pressed, holdOneState.value, holdTwoState.value)
+                                if (next != applied) {
+                                    applied = next
+                                    engine.setSpeed(applied)
+                                    speedBoostLabel = formatSpeedLabel(applied)
+                                }
                             }
+                        } finally {
+                            // Always restore speed and clear the badge, even if the gesture
+                            // coroutine is cancelled mid-hold (dispose/navigation/interruption).
+                            engine.setSpeed(previousSpeed)
+                            speedBoostActive = false
                         }
-                        engine.setSpeed(previousSpeed)
-                        speedBoostActive = false
                     }
                 }
             },
