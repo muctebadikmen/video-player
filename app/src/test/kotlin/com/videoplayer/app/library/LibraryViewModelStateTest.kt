@@ -28,7 +28,7 @@ class LibraryViewModelStateTest {
     @Test fun `uiState exposes sorted videos and per-item progress`() = runTest {
         val folders = listOf(MediaFolder("/f", "f", listOf(item("b.mp4"), item("a.mp4"))))
         val memory = listOf(PlaybackMemoryEntity("uri/a.mp4", 30_000, 120_000, "FIT", 1f, 5))
-        val vm = LibraryViewModel(fakeSourceManager(FakeMediaRepository(folders)), FakeMemorySource(memory), FakeGridSizePreferences())
+        val vm = LibraryViewModel(fakeSourceManager(FakeMediaRepository(folders)), FakeMemorySource(memory), FakeThumbnailController(), FakeGridSizePreferences())
         vm.refresh()
         advanceUntilIdle()
         val s = vm.uiState.value
@@ -39,7 +39,7 @@ class LibraryViewModelStateTest {
 
     @Test fun `setQuery filters videos`() = runTest {
         val folders = listOf(MediaFolder("/f", "f", listOf(item("holiday.mp4"), item("work.mkv"))))
-        val vm = LibraryViewModel(fakeSourceManager(FakeMediaRepository(folders)), FakeMemorySource(emptyList()), FakeGridSizePreferences())
+        val vm = LibraryViewModel(fakeSourceManager(FakeMediaRepository(folders)), FakeMemorySource(emptyList()), FakeThumbnailController(), FakeGridSizePreferences())
         vm.refresh(); advanceUntilIdle()
         vm.setQuery("holi"); advanceUntilIdle()
         assertThat(vm.uiState.value.videos.map { it.displayName }).containsExactly("holiday.mp4")
@@ -47,7 +47,7 @@ class LibraryViewModelStateTest {
 
     @Test fun `setSort reorders videos`() = runTest {
         val folders = listOf(MediaFolder("/f", "f", listOf(item("a.mp4"), item("b.mp4"))))
-        val vm = LibraryViewModel(fakeSourceManager(FakeMediaRepository(folders)), FakeMemorySource(emptyList()), FakeGridSizePreferences())
+        val vm = LibraryViewModel(fakeSourceManager(FakeMediaRepository(folders)), FakeMemorySource(emptyList()), FakeThumbnailController(), FakeGridSizePreferences())
         vm.refresh(); advanceUntilIdle()
         vm.setSort(SortKey.NAME, SortOrder.DESC); advanceUntilIdle()
         assertThat(vm.uiState.value.videos.map { it.displayName }).containsExactly("b.mp4", "a.mp4").inOrder()

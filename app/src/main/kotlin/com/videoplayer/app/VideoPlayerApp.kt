@@ -33,6 +33,7 @@ import com.videoplayer.app.data.saf.SafFolderRepository
 import com.videoplayer.app.data.saf.SavedFolder
 import com.videoplayer.app.data.saf.libraryDataStore
 import com.videoplayer.app.intent.synthesizeMediaItem
+import com.videoplayer.app.thumbnail.ThumbnailRepository
 import com.videoplayer.app.library.LibraryDrawer
 import com.videoplayer.app.library.LibraryScreen
 import com.videoplayer.app.library.LibraryViewModel
@@ -62,6 +63,7 @@ fun VideoPlayerApp(
         LibraryViewModel(
             manager,
             PlaybackMemoryRepository(db.playbackMemoryDao(), settingsRepository),
+            ThumbnailRepository.getInstance(appContext),
             settingsRepository,
         )
     }

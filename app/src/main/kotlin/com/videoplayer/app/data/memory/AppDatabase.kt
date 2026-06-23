@@ -15,10 +15,15 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  * non-nullable `subtitleRate` column via [MIGRATION_1_2]. Adding values to the reserved nullable
  * columns still needs no bump; a new non-reserved column (like subtitleRate) does.
  */
-@Database(entities = [PlaybackMemoryEntity::class], version = 2, exportSchema = false)
+@Database(
+    entities = [PlaybackMemoryEntity::class, VideoThumbnailEntity::class],
+    version = 3,
+    exportSchema = false,
+)
 abstract class AppDatabase : RoomDatabase() {
 
     abstract fun playbackMemoryDao(): PlaybackMemoryDao
+    abstract fun videoThumbnailDao(): VideoThumbnailDao
 
     companion object {
         @Volatile private var INSTANCE: AppDatabase? = null
@@ -31,13 +36,27 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `video_thumbnail` (" +
+                        "`mediaUri` TEXT NOT NULL, " +
+                        "`customThumbnailPath` TEXT, " +
+                        "`autoFrameMs` INTEGER, " +
+                        "`autoResolved` INTEGER NOT NULL DEFAULT 0, " +
+                        "`updatedAtEpochMs` INTEGER NOT NULL DEFAULT 0, " +
+                        "PRIMARY KEY(`mediaUri`))",
+                )
+            }
+        }
+
         fun getInstance(context: Context): AppDatabase =
             INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
                     context.applicationContext,
                     AppDatabase::class.java,
                     "video_player.db",
-                ).addMigrations(MIGRATION_1_2).build().also { INSTANCE = it }
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build().also { INSTANCE = it }
             }
     }
 }

@@ -19,13 +19,13 @@ class LibraryViewModelTest {
 
     @Test
     fun `folders is empty before refresh`() = runTest {
-        val vm = LibraryViewModel(fakeSourceManager(FakeMediaRepository(listOf(folder("m")))), FakeMemorySource(emptyList()), FakeGridSizePreferences())
+        val vm = LibraryViewModel(fakeSourceManager(FakeMediaRepository(listOf(folder("m")))), FakeMemorySource(emptyList()), FakeThumbnailController(), FakeGridSizePreferences())
         assertThat(vm.uiState.value.folders).isEmpty()
     }
 
     @Test
     fun `refresh publishes folders from the repository`() = runTest {
-        val vm = LibraryViewModel(fakeSourceManager(FakeMediaRepository(listOf(folder("movies"), folder("clips")))), FakeMemorySource(emptyList()), FakeGridSizePreferences())
+        val vm = LibraryViewModel(fakeSourceManager(FakeMediaRepository(listOf(folder("movies"), folder("clips")))), FakeMemorySource(emptyList()), FakeThumbnailController(), FakeGridSizePreferences())
         vm.refresh()
         advanceUntilIdle()
         assertThat(vm.uiState.value.folders.map { it.name }).containsExactly("movies", "clips")

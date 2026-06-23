@@ -2,6 +2,7 @@
 package com.videoplayer.app.library
 
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -31,6 +32,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.unit.dp
+import com.videoplayer.app.thumbnail.ThumbnailSpec
 import com.videoplayer.core.model.FolderNode
 import com.videoplayer.core.model.MediaFolder
 import com.videoplayer.core.model.MediaItem
@@ -67,6 +69,9 @@ internal fun FoldersContent(
     gridSize: GridSize,
     query: String,
     progress: Map<String, Float>,
+    thumbnailByUri: Map<String, ThumbnailSpec>,
+    onEnsure: (MediaItem) -> Unit,
+    onLongPress: (MediaItem) -> Unit,
     onItemClick: (MediaItem) -> Unit,
 ) {
     val tree = remember(folders) { buildFolderTree(folders) }
@@ -113,6 +118,9 @@ internal fun FoldersContent(
                     depth = row.depth,
                     gridSize = gridSize,
                     progress = progress,
+                    thumbnailByUri = thumbnailByUri,
+                    onEnsure = onEnsure,
+                    onLongPress = onLongPress,
                     onItemClick = onItemClick,
                 )
             }
@@ -186,13 +194,16 @@ private fun FolderRow(
 
 // ─── VideoGridRow ─────────────────────────────────────────────────────────────
 
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalLayoutApi::class, ExperimentalFoundationApi::class)
 @Composable
 private fun VideoGridRow(
     items: List<MediaItem>,
     depth: Int,
     gridSize: GridSize,
     progress: Map<String, Float>,
+    thumbnailByUri: Map<String, ThumbnailSpec>,
+    onEnsure: (MediaItem) -> Unit,
+    onLongPress: (MediaItem) -> Unit,
     onItemClick: (MediaItem) -> Unit,
 ) {
     val columns = gridSize.columns
@@ -224,7 +235,10 @@ private fun VideoGridRow(
                 ThumbnailTile(
                     item = item,
                     progress = progress[item.uri] ?: 0f,
+                    spec = thumbnailByUri[item.uri],
+                    onEnsure = onEnsure,
                     onClick = { onItemClick(item) },
+                    onLongPress = onLongPress,
                     modifier = Modifier.width(tileWidth),
                 )
             }

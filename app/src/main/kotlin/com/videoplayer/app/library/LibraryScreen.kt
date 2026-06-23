@@ -6,8 +6,9 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -73,10 +74,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.videoplayer.app.thumbnail.ThumbnailSpec
 import com.videoplayer.core.model.MediaItem
 import com.videoplayer.core.model.SortKey
 import com.videoplayer.core.model.SortOrder
 import com.videoplayer.core.model.formatDuration
+import java.io.File
 
 private val readVideoPermission: String
     get() = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -107,6 +110,7 @@ fun LibraryScreen(
             ContextCompat.checkSelfPermission(context, readVideoPermission) == PackageManager.PERMISSION_GRANTED,
         )
     }
+    var pickerTarget by remember { mutableStateOf<MediaItem?>(null) }
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { granted ->
@@ -164,8 +168,16 @@ fun LibraryScreen(
                 }
             }
             LibraryBodyState.CONTENT -> {
+                val onEnsure: (MediaItem) -> Unit = { viewModel.ensureThumbnail(it.uri, it.durationMs) }
+                val onLongPress: (MediaItem) -> Unit = { pickerTarget = it }
                 if (state.continueWatching.isNotEmpty()) {
-                    ContinueWatchingRow(items = state.continueWatching, onItemClick = onItemClick)
+                    ContinueWatchingRow(
+                        items = state.continueWatching,
+                        thumbnailByUri = state.thumbnailByUri,
+                        onEnsure = onEnsure,
+                        onLongPress = onLongPress,
+                        onItemClick = onItemClick,
+                    )
                 }
                 TabRow(selectedTabIndex = state.tab.ordinal) {
                     Tab(
@@ -183,15 +195,32 @@ fun LibraryScreen(
                     LibraryTab.FOLDERS -> FoldersContent(
                         folders = state.folders, gridSize = state.gridSize,
                         query = state.query,
-                        progress = state.progressByUri, onItemClick = onItemClick,
+                        progress = state.progressByUri,
+                        thumbnailByUri = state.thumbnailByUri,
+                        onEnsure = onEnsure,
+                        onLongPress = onLongPress,
+                        onItemClick = onItemClick,
                     )
                     LibraryTab.VIDEOS -> VideosContent(
                         videos = state.videos, viewMode = state.viewMode, gridSize = state.gridSize,
-                        progress = state.progressByUri, onItemClick = onItemClick,
+                        progress = state.progressByUri,
+                        thumbnailByUri = state.thumbnailByUri,
+                        onEnsure = onEnsure,
+                        onLongPress = onLongPress,
+                        onItemClick = onItemClick,
                     )
                 }
             }
         }
+    }
+    pickerTarget?.let { target ->
+        ThumbnailPickerSheet(
+            item = target,
+            hasCustom = state.thumbnailByUri[target.uri] is ThumbnailSpec.Custom,
+            onConfirm = { ms -> viewModel.setCustomThumbnailFromFrame(target.uri, ms) },
+            onReset = { viewModel.resetThumbnail(target.uri) },
+            onDismiss = { pickerTarget = null },
+        )
     }
 }
 
@@ -328,7 +357,13 @@ private fun SortKey.displayName(): String = when (this) {
 // ─── Continue watching ────────────────────────────────────────────────────────
 
 @Composable
-private fun ContinueWatchingRow(items: List<LibraryItemUi>, onItemClick: (MediaItem) -> Unit) {
+private fun ContinueWatchingRow(
+    items: List<LibraryItemUi>,
+    thumbnailByUri: Map<String, ThumbnailSpec>,
+    onEnsure: (MediaItem) -> Unit,
+    onLongPress: (MediaItem) -> Unit,
+    onItemClick: (MediaItem) -> Unit,
+) {
     Column(Modifier.padding(vertical = 8.dp)) {
         Text(
             "Continue watching",
@@ -344,7 +379,10 @@ private fun ContinueWatchingRow(items: List<LibraryItemUi>, onItemClick: (MediaI
                 ThumbnailTile(
                     item = ui.item,
                     progress = ui.progress,
+                    spec = thumbnailByUri[ui.item.uri],
+                    onEnsure = onEnsure,
                     onClick = { onItemClick(ui.item) },
+                    onLongPress = onLongPress,
                     modifier = Modifier.width(160.dp),
                 )
             }
@@ -361,6 +399,9 @@ private fun VideosContent(
     viewMode: ViewMode,
     gridSize: GridSize,
     progress: Map<String, Float>,
+    thumbnailByUri: Map<String, ThumbnailSpec>,
+    onEnsure: (MediaItem) -> Unit,
+    onLongPress: (MediaItem) -> Unit,
     onItemClick: (MediaItem) -> Unit,
 ) {
     if (viewMode == ViewMode.GRID) {
@@ -374,7 +415,10 @@ private fun VideosContent(
                 ThumbnailTile(
                     item = item,
                     progress = progress[item.uri] ?: 0f,
+                    spec = thumbnailByUri[item.uri],
+                    onEnsure = onEnsure,
                     onClick = { onItemClick(item) },
+                    onLongPress = onLongPress,
                 )
             }
         }
@@ -384,7 +428,10 @@ private fun VideosContent(
                 MediaRow(
                     mediaItem = item,
                     progress = progress[item.uri] ?: 0f,
+                    spec = thumbnailByUri[item.uri],
+                    onEnsure = onEnsure,
                     onClick = { onItemClick(item) },
+                    onLongPress = onLongPress,
                 )
             }
         }
@@ -393,16 +440,20 @@ private fun VideosContent(
 
 // ─── Shared item composables ──────────────────────────────────────────────────
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun ThumbnailTile(
     item: MediaItem,
     progress: Float,
+    spec: ThumbnailSpec?,
+    onEnsure: (MediaItem) -> Unit,
     onClick: () -> Unit,
+    onLongPress: (MediaItem) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
         modifier
-            .clickable(onClick = onClick),
+            .combinedClickable(onClick = onClick, onLongClick = { onLongPress(item) }),
     ) {
         Box(
             Modifier
@@ -411,7 +462,12 @@ internal fun ThumbnailTile(
                 .clip(RoundedCornerShape(12.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant),
         ) {
-            VideoThumbnail(uri = item.uri, modifier = Modifier.fillMaxSize())
+            VideoThumbnail(
+                uri = item.uri,
+                spec = spec,
+                onEnsure = { onEnsure(item) },
+                modifier = Modifier.fillMaxSize(),
+            )
 
             // Bottom gradient scrim — keeps duration chip legible over bright frames
             Box(
@@ -466,16 +522,20 @@ internal fun ThumbnailTile(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun MediaRow(
     mediaItem: MediaItem,
     progress: Float,
+    spec: ThumbnailSpec?,
+    onEnsure: (MediaItem) -> Unit,
     onClick: () -> Unit,
+    onLongPress: (MediaItem) -> Unit,
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .combinedClickable(onClick = onClick, onLongClick = { onLongPress(mediaItem) })
             .padding(horizontal = 16.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -488,7 +548,12 @@ private fun MediaRow(
                 .clip(RoundedCornerShape(8.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant),
         ) {
-            VideoThumbnail(uri = mediaItem.uri, modifier = Modifier.fillMaxSize())
+            VideoThumbnail(
+                uri = mediaItem.uri,
+                spec = spec,
+                onEnsure = { onEnsure(mediaItem) },
+                modifier = Modifier.fillMaxSize(),
+            )
         }
         // Text + optional progress
         Column(Modifier.weight(1f)) {
@@ -516,8 +581,19 @@ private fun MediaRow(
 }
 
 @Composable
-private fun VideoThumbnail(uri: String, modifier: Modifier = Modifier) {
+private fun VideoThumbnail(
+    uri: String,
+    spec: ThumbnailSpec?,
+    onEnsure: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val context = LocalContext.current
+
+    // Lazily compute the smart auto-default the first time an un-resolved tile appears.
+    LaunchedEffect(uri, spec == null) {
+        if (spec == null) onEnsure()
+    }
+
     Box(modifier, contentAlignment = Alignment.Center) {
         Icon(
             Icons.Filled.OndemandVideo,
@@ -525,15 +601,27 @@ private fun VideoThumbnail(uri: String, modifier: Modifier = Modifier) {
             tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
             modifier = Modifier.size(32.dp),
         )
-        AsyncImage(
-            model = ImageRequest.Builder(context)
-                .data(uri)
-                .videoFrameMillis(1_000)
+        val request = when (spec) {
+            is ThumbnailSpec.Custom -> ImageRequest.Builder(context)
+                .data(File(spec.path))
+                .memoryCacheKey("thumb:${spec.path}:${spec.updatedAtEpochMs}")
+                .diskCacheKey("thumb:${spec.path}:${spec.updatedAtEpochMs}")
                 .crossfade(true)
-                .build(),
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier.fillMaxSize(),
-        )
+                .build()
+            is ThumbnailSpec.AutoFrame -> ImageRequest.Builder(context)
+                .data(uri)
+                .videoFrameMillis(spec.frameMs)
+                .crossfade(true)
+                .build()
+            null -> null
+        }
+        if (request != null) {
+            AsyncImage(
+                model = request,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
     }
 }

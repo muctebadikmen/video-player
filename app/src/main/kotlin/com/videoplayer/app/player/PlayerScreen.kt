@@ -811,6 +811,11 @@ fun PlayerScreen(
                     interactionTick++
                 },
                 onLock = { locked = true; controlsVisible = false },
+                onSetThumbnail = {
+                    com.videoplayer.app.thumbnail.ThumbnailRepository.getInstance(context)
+                        .setCustomThumbnailFromFrame(currentItem.uri, state.positionMs)
+                    android.widget.Toast.makeText(context, "Thumbnail set", android.widget.Toast.LENGTH_SHORT).show()
+                },
                 orientationLabel = orientationMode.shortLabel(),
                 onCycleOrientation = {
                     orientationMode = nextOrientationMode(orientationMode)

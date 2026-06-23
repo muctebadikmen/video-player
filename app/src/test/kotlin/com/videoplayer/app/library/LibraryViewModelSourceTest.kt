@@ -29,7 +29,7 @@ class LibraryViewModelSourceTest {
             store,
             FakeMediaRepository(listOf(folder("Global"))),
         ) { FakeMediaRepository(listOf(folder("Scoped"))) }
-        val vm = LibraryViewModel(manager, FakeMemorySource(emptyList()), FakeGridSizePreferences())
+        val vm = LibraryViewModel(manager, FakeMemorySource(emptyList()), FakeThumbnailController(), FakeGridSizePreferences())
 
         vm.addFolder(SavedFolder("content://tree/a", "Scoped"))   // also selects + refreshes it
         advanceUntilIdle()
