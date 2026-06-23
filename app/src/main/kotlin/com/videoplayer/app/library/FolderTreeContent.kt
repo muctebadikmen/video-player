@@ -71,6 +71,7 @@ internal fun FoldersContent(
     progress: Map<String, Float>,
     thumbnailByUri: Map<String, ThumbnailSpec>,
     onEnsure: (MediaItem) -> Unit,
+    onLongPress: (MediaItem) -> Unit,
     onItemClick: (MediaItem) -> Unit,
 ) {
     val tree = remember(folders) { buildFolderTree(folders) }
@@ -119,6 +120,7 @@ internal fun FoldersContent(
                     progress = progress,
                     thumbnailByUri = thumbnailByUri,
                     onEnsure = onEnsure,
+                    onLongPress = onLongPress,
                     onItemClick = onItemClick,
                 )
             }
@@ -201,6 +203,7 @@ private fun VideoGridRow(
     progress: Map<String, Float>,
     thumbnailByUri: Map<String, ThumbnailSpec>,
     onEnsure: (MediaItem) -> Unit,
+    onLongPress: (MediaItem) -> Unit,
     onItemClick: (MediaItem) -> Unit,
 ) {
     val columns = gridSize.columns
@@ -235,7 +238,7 @@ private fun VideoGridRow(
                     spec = thumbnailByUri[item.uri],
                     onEnsure = onEnsure,
                     onClick = { onItemClick(item) },
-                    onLongPress = {},
+                    onLongPress = onLongPress,
                     modifier = Modifier.width(tileWidth),
                 )
             }

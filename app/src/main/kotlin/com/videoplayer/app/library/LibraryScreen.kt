@@ -110,6 +110,7 @@ fun LibraryScreen(
             ContextCompat.checkSelfPermission(context, readVideoPermission) == PackageManager.PERMISSION_GRANTED,
         )
     }
+    var pickerTarget by remember { mutableStateOf<MediaItem?>(null) }
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { granted ->
@@ -168,11 +169,13 @@ fun LibraryScreen(
             }
             LibraryBodyState.CONTENT -> {
                 val onEnsure: (MediaItem) -> Unit = { viewModel.ensureThumbnail(it.uri, it.durationMs) }
+                val onLongPress: (MediaItem) -> Unit = { pickerTarget = it }
                 if (state.continueWatching.isNotEmpty()) {
                     ContinueWatchingRow(
                         items = state.continueWatching,
                         thumbnailByUri = state.thumbnailByUri,
                         onEnsure = onEnsure,
+                        onLongPress = onLongPress,
                         onItemClick = onItemClick,
                     )
                 }
@@ -195,6 +198,7 @@ fun LibraryScreen(
                         progress = state.progressByUri,
                         thumbnailByUri = state.thumbnailByUri,
                         onEnsure = onEnsure,
+                        onLongPress = onLongPress,
                         onItemClick = onItemClick,
                     )
                     LibraryTab.VIDEOS -> VideosContent(
@@ -202,11 +206,21 @@ fun LibraryScreen(
                         progress = state.progressByUri,
                         thumbnailByUri = state.thumbnailByUri,
                         onEnsure = onEnsure,
+                        onLongPress = onLongPress,
                         onItemClick = onItemClick,
                     )
                 }
             }
         }
+    }
+    pickerTarget?.let { target ->
+        ThumbnailPickerSheet(
+            item = target,
+            hasCustom = state.thumbnailByUri[target.uri] is ThumbnailSpec.Custom,
+            onConfirm = { ms -> viewModel.setCustomThumbnailFromFrame(target.uri, ms) },
+            onReset = { viewModel.resetThumbnail(target.uri) },
+            onDismiss = { pickerTarget = null },
+        )
     }
 }
 
@@ -347,6 +361,7 @@ private fun ContinueWatchingRow(
     items: List<LibraryItemUi>,
     thumbnailByUri: Map<String, ThumbnailSpec>,
     onEnsure: (MediaItem) -> Unit,
+    onLongPress: (MediaItem) -> Unit,
     onItemClick: (MediaItem) -> Unit,
 ) {
     Column(Modifier.padding(vertical = 8.dp)) {
@@ -367,7 +382,7 @@ private fun ContinueWatchingRow(
                     spec = thumbnailByUri[ui.item.uri],
                     onEnsure = onEnsure,
                     onClick = { onItemClick(ui.item) },
-                    onLongPress = {},
+                    onLongPress = onLongPress,
                     modifier = Modifier.width(160.dp),
                 )
             }
@@ -386,6 +401,7 @@ private fun VideosContent(
     progress: Map<String, Float>,
     thumbnailByUri: Map<String, ThumbnailSpec>,
     onEnsure: (MediaItem) -> Unit,
+    onLongPress: (MediaItem) -> Unit,
     onItemClick: (MediaItem) -> Unit,
 ) {
     if (viewMode == ViewMode.GRID) {
@@ -402,7 +418,7 @@ private fun VideosContent(
                     spec = thumbnailByUri[item.uri],
                     onEnsure = onEnsure,
                     onClick = { onItemClick(item) },
-                    onLongPress = {},
+                    onLongPress = onLongPress,
                 )
             }
         }
@@ -415,7 +431,7 @@ private fun VideosContent(
                     spec = thumbnailByUri[item.uri],
                     onEnsure = onEnsure,
                     onClick = { onItemClick(item) },
-                    onLongPress = {},
+                    onLongPress = onLongPress,
                 )
             }
         }
