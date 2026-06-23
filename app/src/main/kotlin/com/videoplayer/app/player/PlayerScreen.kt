@@ -26,6 +26,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.awaitLongPressOrCancellation
+import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -36,8 +37,11 @@ import com.videoplayer.app.player.gestures.DEFAULT_SUBTITLE_SIZE_FRACTION
 import com.videoplayer.app.player.gestures.DEFAULT_SUBTITLE_BOTTOM_PADDING
 import com.videoplayer.app.player.gestures.formatSpeedLabel
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -62,6 +66,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -90,6 +95,8 @@ import com.videoplayer.app.player.controls.seekTarget
 import com.videoplayer.app.player.gestures.AspectMode
 import com.videoplayer.app.player.gestures.VerticalSide
 import com.videoplayer.app.player.gestures.applyBrightness
+import com.videoplayer.app.player.gestures.applySubtitleBottomPadding
+import com.videoplayer.app.player.gestures.applySubtitleSize
 import com.videoplayer.app.player.gestures.applyVolumeFactor
 import com.videoplayer.app.player.gestures.displayLabel
 import com.videoplayer.app.player.gestures.horizontalSeekDeltaMs
@@ -155,6 +162,7 @@ fun PlayerScreen(
     val activity = remember(context) { context.findActivity() }
     val engine = remember { Media3PlaybackEngine(context) }
     val settingsRepo = remember(context) { SettingsRepository(context.applicationContext.settingsDataStore) }
+    val scope = rememberCoroutineScope()
     val backgroundEnabled by settingsRepo.backgroundPlaybackEnabled.collectAsStateWithLifecycle(initialValue = true)
     val holdSpeedOne by settingsRepo.holdSpeedOneFinger.collectAsStateWithLifecycle(initialValue = DEFAULT_HOLD_SPEED_ONE)
     val holdSpeedTwo by settingsRepo.holdSpeedTwoFinger.collectAsStateWithLifecycle(initialValue = DEFAULT_HOLD_SPEED_TWO)
@@ -830,6 +838,45 @@ fun PlayerScreen(
                 bottomPaddingFraction = subtitleBottomPadding,
                 modifier = Modifier.fillMaxSize().navigationBarsPadding(),
             )
+        }
+
+        if (!inPip && controlsVisible) {
+            BoxWithConstraints(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .fillMaxHeight(0.5f) // lower half = subtitle adjust zone
+            ) {
+                val hPx = constraints.maxHeight.toFloat()
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .pointerInput(Unit) {
+                            // Vertical drag → move; persist on end.
+                            detectVerticalDragGestures(
+                                onDragEnd = { scope.launch { settingsRepo.setSubtitleBottomPaddingFraction(subtitleBottomPadding) } },
+                            ) { change, dragAmount ->
+                                change.consume()
+                                subtitleBottomPadding = applySubtitleBottomPadding(subtitleBottomPadding, dragAmount, hPx)
+                            }
+                        }
+                        .pointerInput(Unit) {
+                            // Pinch → resize; persist on end.
+                            awaitEachGesture {
+                                awaitFirstDown(requireUnconsumed = false)
+                                do {
+                                    val event = awaitPointerEvent()
+                                    val zoom = event.calculateZoom()
+                                    if (zoom != 1f) {
+                                        subtitleSizeFraction = applySubtitleSize(subtitleSizeFraction, zoom)
+                                        event.changes.forEach { it.consume() }
+                                    }
+                                } while (event.changes.any { it.pressed })
+                                scope.launch { settingsRepo.setSubtitleSizeFraction(subtitleSizeFraction) }
+                            }
+                        },
+                )
+            }
         }
 
         if (showSearchSheet && !inPip) {
