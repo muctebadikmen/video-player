@@ -18,6 +18,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.DropdownMenu
@@ -73,6 +74,7 @@ fun PlayerControls(
     sleepActive: Boolean,
     onPickSleep: (SleepOption) -> Unit,
     onLock: () -> Unit,
+    onSetThumbnail: () -> Unit,
     orientationLabel: String,
     onCycleOrientation: () -> Unit,
     pipSupported: Boolean,
@@ -127,6 +129,13 @@ fun PlayerControls(
                 TextButton(onClick = onEnterPip) {
                     Text("PiP", color = Color.White)
                 }
+            }
+            IconButton(onClick = onSetThumbnail) {
+                Icon(
+                    Icons.Filled.Image,
+                    contentDescription = "Set as thumbnail",
+                    tint = Color.White,
+                )
             }
             IconButton(onClick = onLock) {
                 Icon(
