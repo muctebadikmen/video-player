@@ -29,7 +29,10 @@ import androidx.compose.foundation.gestures.awaitLongPressOrCancellation
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
-import androidx.compose.foundation.gestures.waitForUpOrCancellation
+import com.videoplayer.app.player.gestures.boostSpeedForPointers
+import com.videoplayer.app.player.gestures.DEFAULT_HOLD_SPEED_ONE
+import com.videoplayer.app.player.gestures.DEFAULT_HOLD_SPEED_TWO
+import com.videoplayer.app.player.gestures.formatSpeedLabel
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -80,7 +83,6 @@ import com.videoplayer.app.player.controls.doubleTapAction
 import com.videoplayer.app.player.controls.resolveTapZone
 import com.videoplayer.app.player.controls.seekTarget
 import com.videoplayer.app.player.gestures.AspectMode
-import com.videoplayer.app.player.gestures.BOOST_SPEED
 import com.videoplayer.app.player.gestures.VerticalSide
 import com.videoplayer.app.player.gestures.applyBrightness
 import com.videoplayer.app.player.gestures.applyVolumeFactor
@@ -149,6 +151,10 @@ fun PlayerScreen(
     val engine = remember { Media3PlaybackEngine(context) }
     val settingsRepo = remember(context) { SettingsRepository(context.applicationContext.settingsDataStore) }
     val backgroundEnabled by settingsRepo.backgroundPlaybackEnabled.collectAsStateWithLifecycle(initialValue = true)
+    val holdSpeedOne by settingsRepo.holdSpeedOneFinger.collectAsStateWithLifecycle(initialValue = DEFAULT_HOLD_SPEED_ONE)
+    val holdSpeedTwo by settingsRepo.holdSpeedTwoFinger.collectAsStateWithLifecycle(initialValue = DEFAULT_HOLD_SPEED_TWO)
+    val holdOneState = rememberUpdatedState(holdSpeedOne)
+    val holdTwoState = rememberUpdatedState(holdSpeedTwo)
     val state by engine.state.collectAsStateWithLifecycle()
     val startIndex = remember(playlist, startUri) { startIndexFor(playlist.map { it.uri }, startUri) }
     val currentItem = playlist.getOrElse(state.currentMediaIndex) {
@@ -188,6 +194,7 @@ fun PlayerScreen(
     var gestureLabel by remember { mutableStateOf<String?>(null) }
     var gestureSeq by remember { mutableIntStateOf(0) }
     var speedBoostActive by remember { mutableStateOf(false) }
+    var speedBoostLabel by remember { mutableStateOf("") }
     var aspectMode by remember { mutableStateOf(AspectMode.FIT) }
 
     // P1.E-2: Kids Lock + per-file orientation override.
@@ -580,9 +587,23 @@ fun PlayerScreen(
                     val down = awaitFirstDown(requireUnconsumed = false)
                     if (awaitLongPressOrCancellation(down.id) != null) {
                         val previousSpeed = engine.state.value.speed
-                        engine.setSpeed(BOOST_SPEED)
+                        var pressed = currentEvent.changes.count { it.pressed }.coerceAtLeast(1)
+                        var applied = boostSpeedForPointers(pressed, holdOneState.value, holdTwoState.value)
+                        engine.setSpeed(applied)
+                        speedBoostLabel = formatSpeedLabel(applied)
                         speedBoostActive = true
-                        waitForUpOrCancellation()
+                        // Track finger-count changes live until every pointer lifts.
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            pressed = event.changes.count { it.pressed }
+                            if (pressed == 0) break
+                            val next = boostSpeedForPointers(pressed, holdOneState.value, holdTwoState.value)
+                            if (next != applied) {
+                                applied = next
+                                engine.setSpeed(applied)
+                                speedBoostLabel = formatSpeedLabel(applied)
+                            }
+                        }
                         engine.setSpeed(previousSpeed)
                         speedBoostActive = false
                     }
@@ -768,7 +789,7 @@ fun PlayerScreen(
 
         if (!inPip) {
             gestureLabel?.let { GestureOverlay(label = it) }
-            if (speedBoostActive) GestureOverlay(label = "${BOOST_SPEED.toInt()}×")
+            if (speedBoostActive) SpeedBadge(label = speedBoostLabel)
         }
 
         if (!inPip) {

@@ -9,9 +9,6 @@ const val MAX_VOLUME_FACTOR = 2f
 /** A full-width horizontal drag scrubs this many ms. Tunable (sensitivity). */
 const val SEEK_MS_PER_WIDTH = 90_000L
 
-/** Playback speed applied while the long-press is held. */
-const val BOOST_SPEED = 2f
-
 /** Which vertical gesture a touch controls, decided by screen half. */
 enum class VerticalSide { BRIGHTNESS, VOLUME }
 
