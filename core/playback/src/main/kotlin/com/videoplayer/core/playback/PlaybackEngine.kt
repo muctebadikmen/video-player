@@ -34,6 +34,16 @@ interface PlaybackEngine {
     /** Replace the queue with [uris] and start at [startIndex]. */
     fun setMediaPlaylist(uris: List<String>, startIndex: Int)
 
+    /** Skip to the next item in the queue. No-op when already at the last item. */
+    fun seekToNext()
+
+    /**
+     * Standard "previous" transport: if more than a few seconds have elapsed (an
+     * engine-defined threshold; Media3 default 3s), restart the current item;
+     * otherwise skip to the previous item. At the first item it restarts.
+     */
+    fun seekToPrevious()
+
     /** When true, pause at the end of each media item instead of advancing. */
     fun setPauseAtEndOfMediaItems(enabled: Boolean)
 

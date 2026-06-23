@@ -21,6 +21,8 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
@@ -64,6 +66,9 @@ fun PlayerControls(
     aspectLabel: String,
     onCycleAspect: () -> Unit,
     onPlayPause: () -> Unit,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit,
+    hasNext: Boolean,
     onSeekTo: (Long) -> Unit,
     onBack: () -> Unit,
     currentSpeed: Float,
@@ -146,18 +151,42 @@ fun PlayerControls(
             }
         }
 
-        IconButton(
-            onClick = onPlayPause,
-            modifier = Modifier.align(Alignment.Center).size(72.dp),
+        // Center transport: previous · play/pause · next.
+        Row(
+            modifier = Modifier.align(Alignment.Center),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(28.dp),
         ) {
-            if (state.isPlaying) {
-                PauseGlyph()
-            } else {
+            IconButton(onClick = onPrevious, modifier = Modifier.size(56.dp)) {
                 Icon(
-                    imageVector = Icons.Filled.PlayArrow,
-                    contentDescription = "Play",
+                    imageVector = Icons.Filled.SkipPrevious,
+                    contentDescription = "Previous video",
                     tint = Color.White,
-                    modifier = Modifier.size(56.dp),
+                    modifier = Modifier.size(40.dp),
+                )
+            }
+            IconButton(
+                onClick = onPlayPause,
+                modifier = Modifier.size(72.dp),
+            ) {
+                if (state.isPlaying) {
+                    PauseGlyph()
+                } else {
+                    Icon(
+                        imageVector = Icons.Filled.PlayArrow,
+                        contentDescription = "Play",
+                        tint = Color.White,
+                        modifier = Modifier.size(56.dp),
+                    )
+                }
+            }
+            IconButton(onClick = onNext, enabled = hasNext, modifier = Modifier.size(56.dp)) {
+                Icon(
+                    imageVector = Icons.Filled.SkipNext,
+                    contentDescription = "Next video",
+                    // Grey out at the end of the queue (no wrap-around).
+                    tint = if (hasNext) Color.White else Color.White.copy(alpha = 0.35f),
+                    modifier = Modifier.size(40.dp),
                 )
             }
         }
