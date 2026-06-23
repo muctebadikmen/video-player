@@ -6,6 +6,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 
+/** Threshold below which "previous" steps back; above it, restarts. Mirrors ExoPlayer's default. */
+private const val MAX_SEEK_TO_PREVIOUS_MS = 3_000L
+
 /**
  * Deterministic in-memory [PlaybackEngine] for unit tests and Compose previews.
  * No threads, no real decoding — every call updates [state] synchronously, so
@@ -36,9 +39,29 @@ class FakePlaybackEngine(private val fakeDurationMs: Long = 0) : PlaybackEngine 
     var pauseAtEndOfMediaItems: Boolean = false
         private set
 
-    override fun setMediaPlaylist(uris: List<String>, startIndex: Int) = _state.update {
-        val idx = if (uris.isEmpty()) 0 else startIndex.coerceIn(0, uris.lastIndex)
-        it.copy(status = PlayerStatus.READY, durationMs = fakeDurationMs, positionMs = 0, currentMediaIndex = idx)
+    private var playlistUris: List<String> = emptyList()
+
+    override fun setMediaPlaylist(uris: List<String>, startIndex: Int) {
+        playlistUris = uris
+        _state.update {
+            val idx = if (uris.isEmpty()) 0 else startIndex.coerceIn(0, uris.lastIndex)
+            it.copy(status = PlayerStatus.READY, durationMs = fakeDurationMs, positionMs = 0, currentMediaIndex = idx)
+        }
+    }
+
+    override fun seekToNext() = _state.update {
+        val next = it.currentMediaIndex + 1
+        if (next <= playlistUris.lastIndex) it.copy(currentMediaIndex = next, positionMs = 0) else it
+    }
+
+    override fun seekToPrevious() = _state.update {
+        // Mirrors Media3: past the threshold (or already at the first item) restart the
+        // current item; otherwise step back one.
+        if (it.positionMs > MAX_SEEK_TO_PREVIOUS_MS || it.currentMediaIndex == 0) {
+            it.copy(positionMs = 0)
+        } else {
+            it.copy(currentMediaIndex = it.currentMediaIndex - 1, positionMs = 0)
+        }
     }
 
     override fun setPauseAtEndOfMediaItems(enabled: Boolean) {

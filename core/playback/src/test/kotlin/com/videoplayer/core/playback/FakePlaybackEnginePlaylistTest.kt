@@ -25,4 +25,47 @@ class FakePlaybackEnginePlaylistTest {
     @Test fun `currentMediaIndex defaults to zero`() {
         assertThat(PlaybackState().currentMediaIndex).isEqualTo(0)
     }
+
+    @Test fun `seekToNext advances to the next item and resets position`() {
+        val e = FakePlaybackEngine(fakeDurationMs = 100_000)
+        e.setMediaPlaylist(listOf("a", "b", "c"), startIndex = 0)
+        e.seekTo(5_000)
+        e.seekToNext()
+        assertThat(e.state.value.currentMediaIndex).isEqualTo(1)
+        assertThat(e.state.value.positionMs).isEqualTo(0)
+    }
+
+    @Test fun `seekToNext is a no-op at the last item`() {
+        val e = FakePlaybackEngine()
+        e.setMediaPlaylist(listOf("a", "b", "c"), startIndex = 2)
+        e.seekToNext()
+        assertThat(e.state.value.currentMediaIndex).isEqualTo(2)
+    }
+
+    @Test fun `seekToPrevious past the threshold restarts the current item`() {
+        val e = FakePlaybackEngine(fakeDurationMs = 100_000)
+        e.setMediaPlaylist(listOf("a", "b", "c"), startIndex = 1)
+        e.seekTo(5_000) // > 3s threshold
+        e.seekToPrevious()
+        assertThat(e.state.value.currentMediaIndex).isEqualTo(1) // same item
+        assertThat(e.state.value.positionMs).isEqualTo(0) // restarted
+    }
+
+    @Test fun `seekToPrevious within the threshold steps to the previous item`() {
+        val e = FakePlaybackEngine(fakeDurationMs = 100_000)
+        e.setMediaPlaylist(listOf("a", "b", "c"), startIndex = 1)
+        // position is 0 (< 3s threshold)
+        e.seekToPrevious()
+        assertThat(e.state.value.currentMediaIndex).isEqualTo(0)
+        assertThat(e.state.value.positionMs).isEqualTo(0)
+    }
+
+    @Test fun `seekToPrevious at the first item restarts instead of underflowing`() {
+        val e = FakePlaybackEngine(fakeDurationMs = 100_000)
+        e.setMediaPlaylist(listOf("a", "b", "c"), startIndex = 0)
+        e.seekTo(5_000)
+        e.seekToPrevious()
+        assertThat(e.state.value.currentMediaIndex).isEqualTo(0)
+        assertThat(e.state.value.positionMs).isEqualTo(0)
+    }
 }

@@ -272,6 +272,12 @@ class Media3PlaybackEngine(context: Context) : PlaybackEngine {
         c.prepare()
     }
 
+    // seekToNext / seekToPrevious delegate to Player, which owns the queue and the
+    // 3s maxSeekToPreviousPosition threshold (restart-current vs go-to-previous).
+    override fun seekToNext() = withController { it.seekToNext() }
+
+    override fun seekToPrevious() = withController { it.seekToPrevious() }
+
     override fun setPauseAtEndOfMediaItems(enabled: Boolean) = withController { c ->
         val args = Bundle().apply { putBoolean(ARG_PAUSE_AT_END_ENABLED, enabled) }
         c.sendCustomCommand(SessionCommand(CMD_SET_PAUSE_AT_END, Bundle.EMPTY), args)
