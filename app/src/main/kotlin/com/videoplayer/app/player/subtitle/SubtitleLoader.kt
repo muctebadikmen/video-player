@@ -5,7 +5,7 @@ import android.content.Context
 import android.net.Uri
 import android.util.Log
 import com.videoplayer.core.playback.SubtitleCue
-import com.videoplayer.core.playback.parseSubtitles
+import com.videoplayer.core.playback.parseSubtitleBytes
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -20,11 +20,15 @@ object SubtitleLoader {
     suspend fun load(context: Context, uri: String): List<SubtitleCue> =
         withContext(Dispatchers.IO) {
             try {
-                val text = context.contentResolver.openInputStream(Uri.parse(uri))
-                    ?.bufferedReader()
-                    ?.use { it.readText() }
+                if (uri.substringBefore('?').endsWith(".ass", ignoreCase = true) ||
+                    uri.substringBefore('?').endsWith(".ssa", ignoreCase = true)
+                ) {
+                    Log.w(TAG, "Unsupported subtitle format (ASS/SSA), cues will be empty: $uri")
+                }
+                val bytes = context.contentResolver.openInputStream(Uri.parse(uri))
+                    ?.use { it.readBytes() }
                     ?: return@withContext emptyList()
-                parseSubtitles(text)
+                parseSubtitleBytes(bytes)
             } catch (e: Exception) {
                 Log.w(TAG, "Failed to load subtitle: $uri", e)
                 emptyList()
