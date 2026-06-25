@@ -54,6 +54,9 @@ const val DEFAULT_HOLD_SPEED_TWO = 3.0f
 fun boostSpeedForPointers(pressedCount: Int, oneFinger: Float, twoFinger: Float): Float =
     if (pressedCount >= 2) twoFinger else oneFinger
 
+/** True when a brightness/volume/seek drag must be ignored because hold-to-speed owns the pointers. */
+fun shouldIgnoreDrag(speedBoostActive: Boolean): Boolean = speedBoostActive
+
 /** Compact label for the speed badge: "2×", "2.5×" (one decimal, trailing .0 dropped). */
 fun formatSpeedLabel(speed: Float): String {
     val rounded = (speed * 10f).roundToInt() / 10f

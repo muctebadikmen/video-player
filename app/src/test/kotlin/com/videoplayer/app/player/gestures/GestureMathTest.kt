@@ -69,4 +69,12 @@ class GestureMathTest {
     @Test fun `system brightness above max clamps to 1`() {
         assertThat(systemBrightnessFraction(300)).isEqualTo(1f)
     }
+
+    @Test fun `drag ignored while speed boost active`() {
+        assertThat(shouldIgnoreDrag(true)).isTrue()
+    }
+
+    @Test fun `drag allowed when no speed boost`() {
+        assertThat(shouldIgnoreDrag(false)).isFalse()
+    }
 }

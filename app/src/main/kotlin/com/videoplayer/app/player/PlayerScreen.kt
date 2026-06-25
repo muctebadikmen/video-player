@@ -64,6 +64,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -102,6 +103,7 @@ import com.videoplayer.app.player.gestures.applyVolumeFactor
 import com.videoplayer.app.player.gestures.displayLabel
 import com.videoplayer.app.player.gestures.horizontalSeekDeltaMs
 import com.videoplayer.app.player.gestures.nextAspectMode
+import com.videoplayer.app.player.gestures.shouldIgnoreDrag
 import com.videoplayer.app.player.gestures.systemBrightnessFraction
 import com.videoplayer.app.player.gestures.verticalSide
 import com.videoplayer.core.model.MediaItem
@@ -557,6 +559,7 @@ fun PlayerScreen(
                 detectVerticalDragGestures(
                     onDragStart = { offset -> side = verticalSide(offset.x, size.width.toFloat()) },
                     onVerticalDrag = { change, dragAmount ->
+                        if (shouldIgnoreDrag(speedBoostActive)) return@detectVerticalDragGestures
                         change.consume()
                         val h = size.height.toFloat()
                         when (side) {
@@ -590,6 +593,7 @@ fun PlayerScreen(
                         target = startPos
                     },
                     onHorizontalDrag = { change, dragAmount ->
+                        if (shouldIgnoreDrag(speedBoostActive)) return@detectHorizontalDragGestures
                         change.consume()
                         totalDx += dragAmount
                         target = seekTarget(startPos, horizontalSeekDeltaMs(totalDx, size.width.toFloat()), dur)
@@ -598,6 +602,7 @@ fun PlayerScreen(
                         gestureSeq++
                     },
                     onDragEnd = {
+                        if (shouldIgnoreDrag(speedBoostActive)) return@detectHorizontalDragGestures
                         engine.seekTo(target)
                         interactionTick++
                     },
@@ -620,6 +625,9 @@ fun PlayerScreen(
                                 val event = awaitPointerEvent()
                                 pressed = event.changes.count { it.pressed }
                                 if (pressed == 0) break
+                                // Claim the moving pointers so sibling/child drag detectors
+                                // don't treat this hold's motion as a seek/volume/brightness drag.
+                                event.changes.forEach { if (it.positionChanged()) it.consume() }
                                 val next = boostSpeedForPointers(pressed, holdOneState.value, holdTwoState.value)
                                 if (next != applied) {
                                     applied = next
@@ -714,7 +722,7 @@ fun PlayerScreen(
                                     val event = awaitPointerEvent()
                                     // Two-finger only: single-finger drags fall through to the
                                     // brightness/volume/seek gestures on the surface below.
-                                    if (event.changes.count { it.pressed } >= 2) {
+                                    if (event.changes.count { it.pressed } >= 2 && !speedBoostActive) {
                                         val zoom = event.calculateZoom()
                                         val panY = event.calculatePan().y
                                         var changed = false
