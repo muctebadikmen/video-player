@@ -938,8 +938,8 @@ fun PlayerScreen(
         if (locked && !inPip) {
             var hintVisible by remember { mutableStateOf(true) }
             var holdProgress by remember { mutableFloatStateOf(0f) }
-            // While a hold is in progress, keep the affordance on-screen so the 3s unlock
-            // hold can't be cut short by the hint's auto-hide (both are LOCK/UNLOCK = 3s).
+            // While a hold is in progress, keep the affordance on-screen so the unlock
+            // hold can't be cut short by the hint's auto-hide.
             var holdActive by remember { mutableStateOf(false) }
             LaunchedEffect(hintVisible, holdActive) {
                 if (hintVisible && !holdActive) { delay(LOCK_HINT_VISIBLE_MS); hintVisible = false }

@@ -11,7 +11,7 @@ fun nextOrientationMode(current: OrientationMode): OrientationMode {
 }
 
 /** How long the unlock control must be held to release a screen lock. */
-const val UNLOCK_HOLD_MS = 3_000L
+const val UNLOCK_HOLD_MS = 700L
 
 /** How long the "screen locked" hint stays visible after the screen is locked. */
 const val LOCK_HINT_VISIBLE_MS = 3_000L
