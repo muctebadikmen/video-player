@@ -23,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.videoplayer.core.playback.SUBTITLE_NUDGE_MS
+import java.util.Locale
 
 /**
  * Dedicated, roomy subtitle-sync editor presented as a [ModalBottomSheet]. Replaces the
@@ -97,7 +98,7 @@ fun SubtitleSyncSheet(
             // ── Speed / rate ──────────────────────────────────────────────────
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
-                    text = "%.3f×".format(rate),
+                    text = "%.3f×".format(Locale.ROOT, rate),
                     style = MaterialTheme.typography.titleLarge,
                     modifier = Modifier.fillMaxWidth(),
                     textAlign = TextAlign.Center,
