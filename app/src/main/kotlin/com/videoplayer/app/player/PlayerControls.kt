@@ -2,6 +2,7 @@
 package com.videoplayer.app.player
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,20 +19,23 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -59,6 +63,7 @@ enum class TwoPointPhase { IDLE, WAITING_FIRST, WAITING_SECOND }
  * purely from [state]; all actions are delegated up. Visibility/auto-hide is
  * owned by the caller ([PlayerScreen]).
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PlayerControls(
     state: PlaybackState,
@@ -95,8 +100,8 @@ fun PlayerControls(
     modifier: Modifier = Modifier,
 ) {
     var speedMenuExpanded by remember { mutableStateOf(false) }
-    var sleepMenuExpanded by remember { mutableStateOf(false) }
     var subtitleMenuExpanded by remember { mutableStateOf(false) }
+    var optionsSheetExpanded by remember { mutableStateOf(false) }
 
     Box(
         modifier = modifier
@@ -126,10 +131,10 @@ fun PlayerControls(
                     Text("PiP", color = Color.White)
                 }
             }
-            IconButton(onClick = onSetThumbnail) {
+            IconButton(onClick = { optionsSheetExpanded = true }) {
                 Icon(
-                    Icons.Filled.Image,
-                    contentDescription = "Set as thumbnail",
+                    Icons.Filled.Tune,
+                    contentDescription = "Player options",
                     tint = Color.White,
                 )
             }
@@ -188,13 +193,14 @@ fun PlayerControls(
                 .fillMaxWidth()
                 .navigationBarsPadding()
                 .padding(horizontal = 12.dp, vertical = 4.dp),
-            verticalArrangement = Arrangement.spacedBy(0.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            // Secondary control row: speed, frame-step, A-B, sleep
+            // Secondary control row: speed picker + CC. Frame-step, A-B, sleep and
+            // orientation now live in the Player options sheet.
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 // Speed picker
                 Box {
@@ -225,34 +231,6 @@ fun PlayerControls(
                             )
                         }
                     }
-                }
-
-                // Frame-step previous
-                IconButton(onClick = { onFrameStep(-FRAME_STEP_MS) }) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.KeyboardArrowLeft,
-                        contentDescription = "Previous frame",
-                        tint = Color.White,
-                    )
-                }
-
-                // Frame-step next
-                IconButton(onClick = { onFrameStep(FRAME_STEP_MS) }) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                        contentDescription = "Next frame",
-                        tint = Color.White,
-                    )
-                }
-
-                // A-B repeat button
-                val abLabel = when {
-                    abLoop.isComplete -> "A–B ✓"
-                    abLoop.startMs != null -> "A•"
-                    else -> "A–B"
-                }
-                TextButton(onClick = onToggleAb) {
-                    Text(abLabel, color = Color.White)
                 }
 
                 // CC subtitle picker
@@ -337,39 +315,6 @@ fun PlayerControls(
                         }
                     }
                 }
-
-                // Sleep timer
-                // Icons.Filled.Bedtime and Icons.Filled.Schedule are not in material-icons-core;
-                // using a TextButton with emoji label instead.
-                Box {
-                    TextButton(
-                        onClick = { sleepMenuExpanded = true },
-                    ) {
-                        Text(
-                            text = "💤",
-                            color = if (sleepActive) MaterialTheme.colorScheme.primary else Color.White,
-                        )
-                    }
-                    DropdownMenu(
-                        expanded = sleepMenuExpanded,
-                        onDismissRequest = { sleepMenuExpanded = false },
-                    ) {
-                        SleepOption.entries.forEach { option ->
-                            DropdownMenuItem(
-                                text = { Text(option.label) },
-                                onClick = {
-                                    onPickSleep(option)
-                                    sleepMenuExpanded = false
-                                },
-                            )
-                        }
-                    }
-                }
-
-                // Orientation cycle
-                TextButton(onClick = onCycleOrientation) {
-                    Text(orientationLabel, color = Color.White)
-                }
             }
 
             // Seek bar row
@@ -398,6 +343,130 @@ fun PlayerControls(
                     style = MaterialTheme.typography.labelMedium,
                 )
             }
+        }
+
+        if (optionsSheetExpanded) {
+            val sheetState = rememberModalBottomSheetState()
+            ModalBottomSheet(
+                onDismissRequest = { optionsSheetExpanded = false },
+                sheetState = sheetState,
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .navigationBarsPadding()
+                        .padding(horizontal = 24.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    OptionsSectionHeader("Playback")
+
+                    // Frame step
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text("Frame step", style = MaterialTheme.typography.bodyLarge)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            IconButton(onClick = { onFrameStep(-FRAME_STEP_MS) }) {
+                                Icon(
+                                    Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                                    contentDescription = "Previous frame",
+                                )
+                            }
+                            IconButton(onClick = { onFrameStep(FRAME_STEP_MS) }) {
+                                Icon(
+                                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                    contentDescription = "Next frame",
+                                )
+                            }
+                        }
+                    }
+
+                    // A–B repeat
+                    val abLabel = when {
+                        abLoop.isComplete -> "A–B ✓"
+                        abLoop.startMs != null -> "A•"
+                        else -> "A–B"
+                    }
+                    OptionsActionRow(
+                        title = "A–B repeat",
+                        trailing = abLabel,
+                        highlighted = abLoop.startMs != null,
+                        onClick = onToggleAb,
+                    )
+
+                    // Sleep timer
+                    Text(
+                        "Sleep timer",
+                        style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier.padding(top = 8.dp, bottom = 4.dp),
+                    )
+                    SleepOption.entries.forEach { option ->
+                        OptionsActionRow(
+                            title = option.label,
+                            highlighted = sleepActive && option != SleepOption.OFF,
+                            onClick = { onPickSleep(option) },
+                        )
+                    }
+
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                    OptionsSectionHeader("Display")
+
+                    OptionsActionRow(
+                        title = "Orientation",
+                        trailing = orientationLabel,
+                        onClick = onCycleOrientation,
+                    )
+                    OptionsActionRow(
+                        title = "Set as thumbnail",
+                        onClick = {
+                            onSetThumbnail()
+                            optionsSheetExpanded = false
+                        },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun OptionsSectionHeader(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.titleMedium,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+    )
+}
+
+@Composable
+private fun OptionsActionRow(
+    title: String,
+    trailing: String? = null,
+    highlighted: Boolean = false,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(
+            title,
+            style = MaterialTheme.typography.bodyLarge,
+            color = if (highlighted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+        )
+        if (trailing != null) {
+            Text(
+                trailing,
+                style = MaterialTheme.typography.bodyLarge,
+                color = if (highlighted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
