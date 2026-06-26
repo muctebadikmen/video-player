@@ -30,6 +30,8 @@ class SettingsViewModel(
     private val osRepo: OpenSubtitlesCredentialsRepository,
     private val versionName: String,
 ) : ViewModel() {
+    val appVersion: String get() = versionName
+
     val backgroundPlaybackEnabled: StateFlow<Boolean> =
         repo.backgroundPlaybackEnabled.stateIn(
             viewModelScope, SharingStarted.WhileSubscribed(5_000), true,
@@ -38,6 +40,17 @@ class SettingsViewModel(
     fun setBackgroundPlayback(enabled: Boolean) {
         viewModelScope.launch { repo.setBackgroundPlaybackEnabled(enabled) }
     }
+
+    val resumeEnabled: StateFlow<Boolean> =
+        repo.resumeEnabled.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
+    val defaultSpeed: StateFlow<Float> =
+        repo.defaultSpeed.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 1f)
+    val gridColumns: StateFlow<Int> =
+        repo.gridColumns.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 3)
+
+    fun setResumeEnabled(enabled: Boolean) { viewModelScope.launch { repo.setResumeEnabled(enabled) } }
+    fun setDefaultSpeed(v: Float) { viewModelScope.launch { repo.setDefaultSpeed(v) } }
+    fun setGridColumns(n: Int) { viewModelScope.launch { repo.setGridColumns(n) } }
 
     val holdSpeedOneFinger: StateFlow<Float> =
         repo.holdSpeedOneFinger.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DEFAULT_HOLD_SPEED_ONE)

@@ -15,16 +15,15 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -46,10 +45,8 @@ import androidx.compose.ui.unit.dp
 import com.videoplayer.app.player.subtitle.SubtitleOption
 import com.videoplayer.core.model.formatDuration
 import com.videoplayer.core.playback.AbLoop
-import com.videoplayer.core.playback.FRAME_STEP_MS
 import com.videoplayer.core.playback.PlaybackState
 import com.videoplayer.core.playback.SPEED_PRESETS
-import com.videoplayer.core.playback.SUBTITLE_NUDGE_MS
 import com.videoplayer.core.playback.TextTrackInfo
 
 /** Phase of the guided two-point precise-sync capture, driven from PlayerScreen. */
@@ -60,6 +57,7 @@ enum class TwoPointPhase { IDLE, WAITING_FIRST, WAITING_SECOND }
  * purely from [state]; all actions are delegated up. Visibility/auto-hide is
  * owned by the caller ([PlayerScreen]).
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PlayerControls(
     state: PlaybackState,
@@ -86,25 +84,17 @@ fun PlayerControls(
     onEnterPip: () -> Unit,
     subtitleOptions: List<SubtitleOption>,
     selectedSubtitleUri: String?,
-    subtitleOffsetMs: Long,
     onSelectSubtitle: (String?) -> Unit,
     onLoadSubtitleFile: () -> Unit,
     onSearchOnline: () -> Unit,
-    onNudgeSubtitle: (Long) -> Unit,
-    subtitleRate: Float,
-    onAdjustRate: (Float) -> Unit,
-    onResetRate: () -> Unit,
-    twoPointPhase: TwoPointPhase,
-    onStartTwoPoint: () -> Unit,
-    onMarkTwoPoint: () -> Unit,
-    onCancelTwoPoint: () -> Unit,
+    onOpenSyncSheet: () -> Unit,
     textTracks: List<TextTrackInfo>,
     selectedTextTrackId: String?,
     onSelectEmbedded: (String) -> Unit,
+    onOpenOptions: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var speedMenuExpanded by remember { mutableStateOf(false) }
-    var sleepMenuExpanded by remember { mutableStateOf(false) }
     var subtitleMenuExpanded by remember { mutableStateOf(false) }
 
     Box(
@@ -135,10 +125,10 @@ fun PlayerControls(
                     Text("PiP", color = Color.White)
                 }
             }
-            IconButton(onClick = onSetThumbnail) {
+            IconButton(onClick = { onOpenOptions() }) {
                 Icon(
-                    Icons.Filled.Image,
-                    contentDescription = "Set as thumbnail",
+                    Icons.Filled.Tune,
+                    contentDescription = "Player options",
                     tint = Color.White,
                 )
             }
@@ -197,13 +187,14 @@ fun PlayerControls(
                 .fillMaxWidth()
                 .navigationBarsPadding()
                 .padding(horizontal = 12.dp, vertical = 4.dp),
-            verticalArrangement = Arrangement.spacedBy(0.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            // Secondary control row: speed, frame-step, A-B, sleep
+            // Secondary control row: speed picker + CC. Frame-step, A-B, sleep and
+            // orientation now live in the Player options sheet.
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 // Speed picker
                 Box {
@@ -234,34 +225,6 @@ fun PlayerControls(
                             )
                         }
                     }
-                }
-
-                // Frame-step previous
-                IconButton(onClick = { onFrameStep(-FRAME_STEP_MS) }) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.KeyboardArrowLeft,
-                        contentDescription = "Previous frame",
-                        tint = Color.White,
-                    )
-                }
-
-                // Frame-step next
-                IconButton(onClick = { onFrameStep(FRAME_STEP_MS) }) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                        contentDescription = "Next frame",
-                        tint = Color.White,
-                    )
-                }
-
-                // A-B repeat button
-                val abLabel = when {
-                    abLoop.isComplete -> "A–B ✓"
-                    abLoop.startMs != null -> "A•"
-                    else -> "A–B"
-                }
-                TextButton(onClick = onToggleAb) {
-                    Text(abLabel, color = Color.White)
                 }
 
                 // CC subtitle picker
@@ -332,111 +295,19 @@ fun PlayerControls(
                             },
                         )
                         // Sync controls — only meaningful while an external/downloaded subtitle is
-                        // active (embedded engine-rendered tracks are not re-timeable). Items keep the
-                        // menu open so the user can tap repeatedly; the readouts update live.
+                        // active (embedded engine-rendered tracks are not re-timeable). Opens a
+                        // dedicated, roomy sheet instead of cramming editors into this menu.
                         if (selectedSubtitleUri != null) {
                             HorizontalDivider()
-                            // (1) Delay ±50ms — unchanged.
                             DropdownMenuItem(
-                                text = { Text("Delay −50ms (later)") },
-                                onClick = { onNudgeSubtitle(-SUBTITLE_NUDGE_MS) },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Delay: ${subtitleOffsetMs} ms") },
-                                onClick = {},
-                                enabled = false,
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Delay +50ms (earlier)") },
-                                onClick = { onNudgeSubtitle(SUBTITLE_NUDGE_MS) },
-                            )
-
-                            HorizontalDivider()
-                            // (2) Speed / rate — coarse ±0.01, fine ±0.001, current value to 3 dp.
-                            DropdownMenuItem(
-                                text = { Text("Speed −0.01") },
-                                onClick = { onAdjustRate(-0.01f) },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Speed −0.001") },
-                                onClick = { onAdjustRate(-0.001f) },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Speed: ${"%.3f".format(subtitleRate)}×") },
-                                onClick = { onResetRate() }, // tap the readout to reset to 1.000×
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Speed +0.001") },
-                                onClick = { onAdjustRate(0.001f) },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Speed +0.01") },
-                                onClick = { onAdjustRate(0.01f) },
-                            )
-
-                            HorizontalDivider()
-                            // (3) Precise sync (two-point) — guided capture.
-                            when (twoPointPhase) {
-                                TwoPointPhase.IDLE -> DropdownMenuItem(
-                                    text = { Text("Precise sync (2-point)…") },
-                                    onClick = { onStartTwoPoint() },
-                                )
-                                TwoPointPhase.WAITING_FIRST -> {
-                                    DropdownMenuItem(
-                                        text = { Text("Play to the first line, then Mark line 1") },
-                                        onClick = { onMarkTwoPoint() },
-                                    )
-                                    DropdownMenuItem(
-                                        text = { Text("Cancel precise sync") },
-                                        onClick = { onCancelTwoPoint() },
-                                    )
-                                }
-                                TwoPointPhase.WAITING_SECOND -> {
-                                    DropdownMenuItem(
-                                        text = { Text("Play to a later line, then Mark line 2") },
-                                        onClick = { onMarkTwoPoint() },
-                                    )
-                                    DropdownMenuItem(
-                                        text = { Text("Cancel precise sync") },
-                                        onClick = { onCancelTwoPoint() },
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // Sleep timer
-                // Icons.Filled.Bedtime and Icons.Filled.Schedule are not in material-icons-core;
-                // using a TextButton with emoji label instead.
-                Box {
-                    TextButton(
-                        onClick = { sleepMenuExpanded = true },
-                    ) {
-                        Text(
-                            text = "💤",
-                            color = if (sleepActive) MaterialTheme.colorScheme.primary else Color.White,
-                        )
-                    }
-                    DropdownMenu(
-                        expanded = sleepMenuExpanded,
-                        onDismissRequest = { sleepMenuExpanded = false },
-                    ) {
-                        SleepOption.entries.forEach { option ->
-                            DropdownMenuItem(
-                                text = { Text(option.label) },
+                                text = { Text("Adjust sync…") },
                                 onClick = {
-                                    onPickSleep(option)
-                                    sleepMenuExpanded = false
+                                    onOpenSyncSheet()
+                                    subtitleMenuExpanded = false
                                 },
                             )
                         }
                     }
-                }
-
-                // Orientation cycle
-                TextButton(onClick = onCycleOrientation) {
-                    Text(orientationLabel, color = Color.White)
                 }
             }
 

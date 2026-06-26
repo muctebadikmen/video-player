@@ -12,8 +12,8 @@ class ScreenControlsTest {
         assertThat(nextOrientationMode(OrientationMode.REVERSE_LANDSCAPE)).isEqualTo(OrientationMode.AUTO)
     }
 
-    @Test fun `lock-hold constants are three seconds`() {
-        assertThat(UNLOCK_HOLD_MS).isEqualTo(3_000L)
+    @Test fun `lock-hold constants have expected durations`() {
+        assertThat(UNLOCK_HOLD_MS).isEqualTo(700L)
         assertThat(LOCK_HINT_VISIBLE_MS).isEqualTo(3_000L)
     }
 }

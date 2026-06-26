@@ -22,6 +22,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.videoplayer.core.playback.SubtitleSearchResult
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -75,7 +76,7 @@ private fun ResultRow(r: SubtitleSearchResult, onDownload: (SubtitleSearchResult
             }.joinToString(" · ")
             Text("${r.language.uppercase()} · ${r.release.ifBlank { r.fileName }}", style = MaterialTheme.typography.bodyMedium)
             Text(
-                "↓${r.downloadCount}  ★${"%.1f".format(r.rating)}" + (if (badges.isNotEmpty()) "  ·  $badges" else ""),
+                "↓${r.downloadCount}  ★${"%.1f".format(Locale.ROOT, r.rating)}" + (if (badges.isNotEmpty()) "  ·  $badges" else ""),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

@@ -64,6 +64,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -102,6 +103,7 @@ import com.videoplayer.app.player.gestures.applyVolumeFactor
 import com.videoplayer.app.player.gestures.displayLabel
 import com.videoplayer.app.player.gestures.horizontalSeekDeltaMs
 import com.videoplayer.app.player.gestures.nextAspectMode
+import com.videoplayer.app.player.gestures.shouldIgnoreDrag
 import com.videoplayer.app.player.gestures.systemBrightnessFraction
 import com.videoplayer.app.player.gestures.verticalSide
 import com.videoplayer.core.model.MediaItem
@@ -302,6 +304,11 @@ fun PlayerScreen(
         viewModel(factory = SubtitleSearchViewModel.factory(context))
     val searchState by searchViewModel.uiState.collectAsStateWithLifecycle()
     var showSearchSheet by remember { mutableStateOf(false) }
+    // Re-key on the file so switching videos closes a stale sync sheet.
+    var showSyncSheet by remember(currentItem.uri) { mutableStateOf(false) }
+    // Player options sheet, hoisted to the root Box (like the sync sheet) so the 3s control
+    // auto-hide can't tear it down mid-interaction. Re-keyed on the file for the same reason.
+    var showOptionsSheet by remember(currentItem.uri) { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
@@ -557,6 +564,7 @@ fun PlayerScreen(
                 detectVerticalDragGestures(
                     onDragStart = { offset -> side = verticalSide(offset.x, size.width.toFloat()) },
                     onVerticalDrag = { change, dragAmount ->
+                        if (shouldIgnoreDrag(speedBoostActive)) return@detectVerticalDragGestures
                         change.consume()
                         val h = size.height.toFloat()
                         when (side) {
@@ -590,6 +598,7 @@ fun PlayerScreen(
                         target = startPos
                     },
                     onHorizontalDrag = { change, dragAmount ->
+                        if (shouldIgnoreDrag(speedBoostActive)) return@detectHorizontalDragGestures
                         change.consume()
                         totalDx += dragAmount
                         target = seekTarget(startPos, horizontalSeekDeltaMs(totalDx, size.width.toFloat()), dur)
@@ -598,6 +607,7 @@ fun PlayerScreen(
                         gestureSeq++
                     },
                     onDragEnd = {
+                        if (shouldIgnoreDrag(speedBoostActive)) return@detectHorizontalDragGestures
                         engine.seekTo(target)
                         interactionTick++
                     },
@@ -620,6 +630,9 @@ fun PlayerScreen(
                                 val event = awaitPointerEvent()
                                 pressed = event.changes.count { it.pressed }
                                 if (pressed == 0) break
+                                // Claim the moving pointers so sibling/child drag detectors
+                                // don't treat this hold's motion as a seek/volume/brightness drag.
+                                event.changes.forEach { if (it.positionChanged()) it.consume() }
                                 val next = boostSpeedForPointers(pressed, holdOneState.value, holdTwoState.value)
                                 if (next != applied) {
                                     applied = next
@@ -714,7 +727,7 @@ fun PlayerScreen(
                                     val event = awaitPointerEvent()
                                     // Two-finger only: single-finger drags fall through to the
                                     // brightness/volume/seek gestures on the surface below.
-                                    if (event.changes.count { it.pressed } >= 2) {
+                                    if (event.changes.count { it.pressed } >= 2 && !speedBoostActive) {
                                         val zoom = event.calculateZoom()
                                         val panY = event.calculatePan().y
                                         var changed = false
@@ -845,7 +858,6 @@ fun PlayerScreen(
                 },
                 subtitleOptions = subtitleOptions,
                 selectedSubtitleUri = selectedSubtitleUri,
-                subtitleOffsetMs = subtitleOffsetMs,
                 onSelectSubtitle = { uri ->
                     engine.selectEmbeddedTextTrack(null) // external/off disables embedded text
                     selectedSubtitleUri = uri
@@ -855,46 +867,14 @@ fun PlayerScreen(
                     showSearchSheet = true
                     searchViewModel.search(context, currentItem.uri, currentItem.displayName)
                 },
-                onNudgeSubtitle = { delta -> subtitleOffsetMs = nudgeSubtitleOffset(subtitleOffsetMs, delta) },
-                subtitleRate = subtitleRate,
-                onAdjustRate = { delta ->
-                    // Clamp to a sane band; 3-decimal granularity, identity stays reachable.
-                    subtitleRate = (subtitleRate + delta).coerceIn(0.5f, 2.0f)
-                },
-                onResetRate = { subtitleRate = 1.0f },
-                twoPointPhase = twoPointPhase,
-                onStartTwoPoint = { twoPointPhase = TwoPointPhase.WAITING_FIRST },
-                onCancelTwoPoint = { twoPointPhase = TwoPointPhase.IDLE },
-                onMarkTwoPoint = {
-                    val want = cueStartForMark(
-                        subtitleCues, state.positionMs, subtitleOffsetMs, subtitleRate.toDouble(),
-                    )
-                    if (want != null) {
-                        when (twoPointPhase) {
-                            TwoPointPhase.WAITING_FIRST -> {
-                                twoPointFirstOrig = state.positionMs
-                                twoPointFirstWant = want
-                                twoPointPhase = TwoPointPhase.WAITING_SECOND
-                            }
-                            TwoPointPhase.WAITING_SECOND -> {
-                                val fit = twoPointSync(
-                                    orig1 = twoPointFirstOrig, want1 = twoPointFirstWant,
-                                    orig2 = state.positionMs, want2 = want,
-                                )
-                                subtitleRate = fit.rate.toFloat().coerceIn(0.5f, 2.0f)
-                                subtitleOffsetMs = fit.offset
-                                twoPointPhase = TwoPointPhase.IDLE
-                            }
-                            TwoPointPhase.IDLE -> { /* no-op: Mark is only shown while capturing */ }
-                        }
-                    }
-                },
+                onOpenSyncSheet = { showSyncSheet = true },
                 textTracks = state.textTracks,
                 selectedTextTrackId = state.selectedTextTrackId,
                 onSelectEmbedded = { id ->
                     selectedSubtitleUri = null // embedded selection clears the custom overlay
                     engine.selectEmbeddedTextTrack(id)
                 },
+                onOpenOptions = { showOptionsSheet = true },
             )
         }
 
@@ -935,11 +915,106 @@ fun PlayerScreen(
             )
         }
 
+        if (showSyncSheet && !inPip && selectedSubtitleUri != null) {
+            SubtitleSyncSheet(
+                offsetMs = subtitleOffsetMs,
+                onNudge = { delta -> subtitleOffsetMs = nudgeSubtitleOffset(subtitleOffsetMs, delta) },
+                onResetOffset = { subtitleOffsetMs = 0L },
+                rate = subtitleRate,
+                onAdjustRate = { delta ->
+                    // Clamp to a sane band; 3-decimal granularity, identity stays reachable.
+                    subtitleRate = (subtitleRate + delta).coerceIn(0.5f, 2.0f)
+                },
+                onResetRate = { subtitleRate = 1.0f },
+                twoPointPhase = twoPointPhase,
+                onStartTwoPoint = { twoPointPhase = TwoPointPhase.WAITING_FIRST },
+                onCancelTwoPoint = { twoPointPhase = TwoPointPhase.IDLE },
+                onMarkTwoPoint = {
+                    val want = cueStartForMark(
+                        subtitleCues, state.positionMs, subtitleOffsetMs, subtitleRate.toDouble(),
+                    )
+                    if (want != null) {
+                        when (twoPointPhase) {
+                            TwoPointPhase.WAITING_FIRST -> {
+                                twoPointFirstOrig = state.positionMs
+                                twoPointFirstWant = want
+                                twoPointPhase = TwoPointPhase.WAITING_SECOND
+                            }
+                            TwoPointPhase.WAITING_SECOND -> {
+                                val fit = twoPointSync(
+                                    orig1 = twoPointFirstOrig, want1 = twoPointFirstWant,
+                                    orig2 = state.positionMs, want2 = want,
+                                )
+                                subtitleRate = fit.rate.toFloat().coerceIn(0.5f, 2.0f)
+                                subtitleOffsetMs = fit.offset
+                                twoPointPhase = TwoPointPhase.IDLE
+                            }
+                            TwoPointPhase.IDLE -> { /* no-op: Mark is only shown while capturing */ }
+                        }
+                    }
+                },
+                onDismiss = { showSyncSheet = false },
+            )
+        }
+
+        if (showOptionsSheet && !inPip) {
+            PlayerOptionsSheet(
+                abLoop = abLoop,
+                sleepActive = sleepActive,
+                orientationLabel = orientationMode.shortLabel(),
+                onFrameStep = { delta ->
+                    val s = engine.state.value
+                    engine.pause()
+                    engine.seekTo(seekTarget(s.positionMs, delta, s.durationMs))
+                    interactionTick++
+                },
+                onToggleAb = {
+                    abLoop = when {
+                        abLoop.startMs == null -> abLoop.copy(startMs = engine.state.value.positionMs)
+                        abLoop.endMs == null -> abLoop.copy(endMs = engine.state.value.positionMs)
+                        else -> AbLoop()
+                    }
+                    interactionTick++
+                },
+                onPickSleep = { option ->
+                    when (option) {
+                        SleepOption.OFF -> {
+                            sleepDeadlineMs = null
+                            sleepAtEndOfVideo = false
+                        }
+                        SleepOption.END_OF_VIDEO -> {
+                            sleepAtEndOfVideo = true
+                            sleepDeadlineMs = null
+                        }
+                        else -> {
+                            sleepAtEndOfVideo = false
+                            sleepDeadlineMs = System.currentTimeMillis() + option.minutes!! * 60_000L
+                        }
+                    }
+                    interactionTick++
+                },
+                onCycleOrientation = {
+                    orientationMode = nextOrientationMode(orientationMode)
+                    val ai = orientationMode.toActivityInfo()
+                    activity?.requestedOrientation = ai
+                    playerViewModel.persistOrientation(currentItem.uri, ai)
+                    interactionTick++
+                },
+                onSetThumbnail = {
+                    com.videoplayer.app.thumbnail.ThumbnailRepository.getInstance(context)
+                        .setCustomThumbnailFromFrame(currentItem.uri, state.positionMs)
+                    android.widget.Toast.makeText(context, "Thumbnail set", android.widget.Toast.LENGTH_SHORT).show()
+                    showOptionsSheet = false
+                },
+                onDismiss = { showOptionsSheet = false },
+            )
+        }
+
         if (locked && !inPip) {
             var hintVisible by remember { mutableStateOf(true) }
             var holdProgress by remember { mutableFloatStateOf(0f) }
-            // While a hold is in progress, keep the affordance on-screen so the 3s unlock
-            // hold can't be cut short by the hint's auto-hide (both are LOCK/UNLOCK = 3s).
+            // While a hold is in progress, keep the affordance on-screen so the unlock
+            // hold can't be cut short by the hint's auto-hide.
             var holdActive by remember { mutableStateOf(false) }
             LaunchedEffect(hintVisible, holdActive) {
                 if (hintVisible && !holdActive) { delay(LOCK_HINT_VISIBLE_MS); hintVisible = false }

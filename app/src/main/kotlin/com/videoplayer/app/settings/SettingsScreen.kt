@@ -44,11 +44,16 @@ import com.videoplayer.app.player.gestures.SUBTITLE_SIZE_MIN
 import com.videoplayer.app.player.gestures.formatSpeedLabel
 import com.videoplayer.app.player.subtitle.CueOverlay
 import com.videoplayer.app.player.subtitle.SubtitleStyle
+import com.videoplayer.core.playback.SPEED_PRESETS
+import kotlin.math.roundToInt
 
 @Composable
 fun SettingsScreen(onBack: () -> Unit) {
     val vm: SettingsViewModel = viewModel(factory = SettingsViewModel.factory(LocalContext.current))
     val backgroundEnabled by vm.backgroundPlaybackEnabled.collectAsStateWithLifecycle()
+    val resumeEnabled by vm.resumeEnabled.collectAsStateWithLifecycle()
+    val defaultSpeed by vm.defaultSpeed.collectAsStateWithLifecycle()
+    val gridColumns by vm.gridColumns.collectAsStateWithLifecycle()
     val osCreds by vm.osCredentials.collectAsStateWithLifecycle()
     val osStatus by vm.osLoginStatus.collectAsStateWithLifecycle()
     val holdOne by vm.holdSpeedOneFinger.collectAsStateWithLifecycle()
@@ -75,14 +80,23 @@ fun SettingsScreen(onBack: () -> Unit) {
                 }
                 Text("Settings", style = MaterialTheme.typography.titleLarge)
             }
+            SectionHeader("Playback")
+            SettingSwitchRow(
+                title = "Resume where you left off",
+                subtitle = "Continue videos from where you stopped watching",
+                checked = resumeEnabled,
+                onCheckedChange = vm::setResumeEnabled,
+            )
+            SpeedPresetPicker(selected = defaultSpeed, onSelect = vm::setDefaultSpeed)
             SettingSwitchRow(
                 title = "Background playback",
                 subtitle = "Keep playing audio and Picture-in-Picture when you leave the player",
                 checked = backgroundEnabled,
                 onCheckedChange = vm::setBackgroundPlayback,
             )
+
             HorizontalDivider()
-            SectionHeader("Playback gestures")
+            SectionHeader("Gestures")
             SettingSliderRow(
                 title = "Hold to speed up · 1 finger",
                 valueLabel = "${formatSpeedLabel(holdOne)}",
@@ -95,6 +109,7 @@ fun SettingsScreen(onBack: () -> Unit) {
                 value = holdTwo, valueRange = HOLD_SPEED_MIN..HOLD_SPEED_MAX, steps = 29,
                 onValueChange = vm::setHoldSpeedTwoFinger,
             )
+
             HorizontalDivider()
             SectionHeader("Subtitles")
             SubtitleStylePicker(selected = subStyle, onSelect = vm::setSubtitleStyle)
@@ -117,7 +132,18 @@ fun SettingsScreen(onBack: () -> Unit) {
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
             )
             SubtitlePreview(style = subStyle, sizeFraction = subSize)
+
             HorizontalDivider()
+            SectionHeader("Library")
+            SettingSliderRow(
+                title = "Grid columns",
+                valueLabel = "$gridColumns",
+                value = gridColumns.toFloat(), valueRange = 2f..4f, steps = 1,
+                onValueChange = { vm.setGridColumns(it.roundToInt()) },
+            )
+
+            HorizontalDivider()
+            SectionHeader("Account")
             OpenSubtitlesSettings(
                 creds = osCreds,
                 loginStatus = osStatus,
@@ -126,6 +152,15 @@ fun SettingsScreen(onBack: () -> Unit) {
                 onFavLangsChange = vm::setFavoriteLanguages,
                 onLogin = vm::login,
                 onLogout = vm::logout,
+            )
+
+            HorizontalDivider()
+            SectionHeader("About")
+            Text(
+                "Version ${vm.appVersion}",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
             )
         }
     }
@@ -196,6 +231,27 @@ private fun SubtitleStylePicker(selected: SubtitleStyle, onSelect: (SubtitleStyl
             ) {
                 RadioButton(selected = selected == style, onClick = { onSelect(style) })
                 Text(label, style = MaterialTheme.typography.bodyLarge)
+            }
+        }
+    }
+}
+
+@Composable
+private fun SpeedPresetPicker(selected: Float, onSelect: (Float) -> Unit) {
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
+        Text(
+            "Default speed",
+            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier.padding(vertical = 4.dp),
+        )
+        SPEED_PRESETS.forEach { preset ->
+            Row(
+                modifier = Modifier.fillMaxWidth().clickable { onSelect(preset) }.padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                RadioButton(selected = selected == preset, onClick = { onSelect(preset) })
+                Text(formatSpeedLabel(preset), style = MaterialTheme.typography.bodyLarge)
             }
         }
     }
