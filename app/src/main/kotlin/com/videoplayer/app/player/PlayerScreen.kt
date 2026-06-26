@@ -304,6 +304,8 @@ fun PlayerScreen(
         viewModel(factory = SubtitleSearchViewModel.factory(context))
     val searchState by searchViewModel.uiState.collectAsStateWithLifecycle()
     var showSearchSheet by remember { mutableStateOf(false) }
+    // Re-key on the file so switching videos closes a stale sync sheet.
+    var showSyncSheet by remember(currentItem.uri) { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
@@ -853,7 +855,6 @@ fun PlayerScreen(
                 },
                 subtitleOptions = subtitleOptions,
                 selectedSubtitleUri = selectedSubtitleUri,
-                subtitleOffsetMs = subtitleOffsetMs,
                 onSelectSubtitle = { uri ->
                     engine.selectEmbeddedTextTrack(null) // external/off disables embedded text
                     selectedSubtitleUri = uri
@@ -863,40 +864,7 @@ fun PlayerScreen(
                     showSearchSheet = true
                     searchViewModel.search(context, currentItem.uri, currentItem.displayName)
                 },
-                onNudgeSubtitle = { delta -> subtitleOffsetMs = nudgeSubtitleOffset(subtitleOffsetMs, delta) },
-                subtitleRate = subtitleRate,
-                onAdjustRate = { delta ->
-                    // Clamp to a sane band; 3-decimal granularity, identity stays reachable.
-                    subtitleRate = (subtitleRate + delta).coerceIn(0.5f, 2.0f)
-                },
-                onResetRate = { subtitleRate = 1.0f },
-                twoPointPhase = twoPointPhase,
-                onStartTwoPoint = { twoPointPhase = TwoPointPhase.WAITING_FIRST },
-                onCancelTwoPoint = { twoPointPhase = TwoPointPhase.IDLE },
-                onMarkTwoPoint = {
-                    val want = cueStartForMark(
-                        subtitleCues, state.positionMs, subtitleOffsetMs, subtitleRate.toDouble(),
-                    )
-                    if (want != null) {
-                        when (twoPointPhase) {
-                            TwoPointPhase.WAITING_FIRST -> {
-                                twoPointFirstOrig = state.positionMs
-                                twoPointFirstWant = want
-                                twoPointPhase = TwoPointPhase.WAITING_SECOND
-                            }
-                            TwoPointPhase.WAITING_SECOND -> {
-                                val fit = twoPointSync(
-                                    orig1 = twoPointFirstOrig, want1 = twoPointFirstWant,
-                                    orig2 = state.positionMs, want2 = want,
-                                )
-                                subtitleRate = fit.rate.toFloat().coerceIn(0.5f, 2.0f)
-                                subtitleOffsetMs = fit.offset
-                                twoPointPhase = TwoPointPhase.IDLE
-                            }
-                            TwoPointPhase.IDLE -> { /* no-op: Mark is only shown while capturing */ }
-                        }
-                    }
-                },
+                onOpenSyncSheet = { showSyncSheet = true },
                 textTracks = state.textTracks,
                 selectedTextTrackId = state.selectedTextTrackId,
                 onSelectEmbedded = { id ->
@@ -940,6 +908,48 @@ fun PlayerScreen(
                 },
                 onOpenSettings = onOpenSettings,
                 onDismiss = { showSearchSheet = false },
+            )
+        }
+
+        if (showSyncSheet && !inPip && selectedSubtitleUri != null) {
+            SubtitleSyncSheet(
+                offsetMs = subtitleOffsetMs,
+                onNudge = { delta -> subtitleOffsetMs = nudgeSubtitleOffset(subtitleOffsetMs, delta) },
+                onResetOffset = { subtitleOffsetMs = 0L },
+                rate = subtitleRate,
+                onAdjustRate = { delta ->
+                    // Clamp to a sane band; 3-decimal granularity, identity stays reachable.
+                    subtitleRate = (subtitleRate + delta).coerceIn(0.5f, 2.0f)
+                },
+                onResetRate = { subtitleRate = 1.0f },
+                twoPointPhase = twoPointPhase,
+                onStartTwoPoint = { twoPointPhase = TwoPointPhase.WAITING_FIRST },
+                onCancelTwoPoint = { twoPointPhase = TwoPointPhase.IDLE },
+                onMarkTwoPoint = {
+                    val want = cueStartForMark(
+                        subtitleCues, state.positionMs, subtitleOffsetMs, subtitleRate.toDouble(),
+                    )
+                    if (want != null) {
+                        when (twoPointPhase) {
+                            TwoPointPhase.WAITING_FIRST -> {
+                                twoPointFirstOrig = state.positionMs
+                                twoPointFirstWant = want
+                                twoPointPhase = TwoPointPhase.WAITING_SECOND
+                            }
+                            TwoPointPhase.WAITING_SECOND -> {
+                                val fit = twoPointSync(
+                                    orig1 = twoPointFirstOrig, want1 = twoPointFirstWant,
+                                    orig2 = state.positionMs, want2 = want,
+                                )
+                                subtitleRate = fit.rate.toFloat().coerceIn(0.5f, 2.0f)
+                                subtitleOffsetMs = fit.offset
+                                twoPointPhase = TwoPointPhase.IDLE
+                            }
+                            TwoPointPhase.IDLE -> { /* no-op: Mark is only shown while capturing */ }
+                        }
+                    }
+                },
+                onDismiss = { showSyncSheet = false },
             )
         }
 

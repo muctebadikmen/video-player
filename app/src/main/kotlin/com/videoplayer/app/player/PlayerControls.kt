@@ -49,7 +49,6 @@ import com.videoplayer.core.playback.AbLoop
 import com.videoplayer.core.playback.FRAME_STEP_MS
 import com.videoplayer.core.playback.PlaybackState
 import com.videoplayer.core.playback.SPEED_PRESETS
-import com.videoplayer.core.playback.SUBTITLE_NUDGE_MS
 import com.videoplayer.core.playback.TextTrackInfo
 
 /** Phase of the guided two-point precise-sync capture, driven from PlayerScreen. */
@@ -86,18 +85,10 @@ fun PlayerControls(
     onEnterPip: () -> Unit,
     subtitleOptions: List<SubtitleOption>,
     selectedSubtitleUri: String?,
-    subtitleOffsetMs: Long,
     onSelectSubtitle: (String?) -> Unit,
     onLoadSubtitleFile: () -> Unit,
     onSearchOnline: () -> Unit,
-    onNudgeSubtitle: (Long) -> Unit,
-    subtitleRate: Float,
-    onAdjustRate: (Float) -> Unit,
-    onResetRate: () -> Unit,
-    twoPointPhase: TwoPointPhase,
-    onStartTwoPoint: () -> Unit,
-    onMarkTwoPoint: () -> Unit,
-    onCancelTwoPoint: () -> Unit,
+    onOpenSyncSheet: () -> Unit,
     textTracks: List<TextTrackInfo>,
     selectedTextTrackId: String?,
     onSelectEmbedded: (String) -> Unit,
@@ -332,76 +323,17 @@ fun PlayerControls(
                             },
                         )
                         // Sync controls — only meaningful while an external/downloaded subtitle is
-                        // active (embedded engine-rendered tracks are not re-timeable). Items keep the
-                        // menu open so the user can tap repeatedly; the readouts update live.
+                        // active (embedded engine-rendered tracks are not re-timeable). Opens a
+                        // dedicated, roomy sheet instead of cramming editors into this menu.
                         if (selectedSubtitleUri != null) {
                             HorizontalDivider()
-                            // (1) Delay ±50ms — unchanged.
                             DropdownMenuItem(
-                                text = { Text("Delay −50ms (later)") },
-                                onClick = { onNudgeSubtitle(-SUBTITLE_NUDGE_MS) },
+                                text = { Text("Adjust sync…") },
+                                onClick = {
+                                    onOpenSyncSheet()
+                                    subtitleMenuExpanded = false
+                                },
                             )
-                            DropdownMenuItem(
-                                text = { Text("Delay: ${subtitleOffsetMs} ms") },
-                                onClick = {},
-                                enabled = false,
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Delay +50ms (earlier)") },
-                                onClick = { onNudgeSubtitle(SUBTITLE_NUDGE_MS) },
-                            )
-
-                            HorizontalDivider()
-                            // (2) Speed / rate — coarse ±0.01, fine ±0.001, current value to 3 dp.
-                            DropdownMenuItem(
-                                text = { Text("Speed −0.01") },
-                                onClick = { onAdjustRate(-0.01f) },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Speed −0.001") },
-                                onClick = { onAdjustRate(-0.001f) },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Speed: ${"%.3f".format(subtitleRate)}×") },
-                                onClick = { onResetRate() }, // tap the readout to reset to 1.000×
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Speed +0.001") },
-                                onClick = { onAdjustRate(0.001f) },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Speed +0.01") },
-                                onClick = { onAdjustRate(0.01f) },
-                            )
-
-                            HorizontalDivider()
-                            // (3) Precise sync (two-point) — guided capture.
-                            when (twoPointPhase) {
-                                TwoPointPhase.IDLE -> DropdownMenuItem(
-                                    text = { Text("Precise sync (2-point)…") },
-                                    onClick = { onStartTwoPoint() },
-                                )
-                                TwoPointPhase.WAITING_FIRST -> {
-                                    DropdownMenuItem(
-                                        text = { Text("Play to the first line, then Mark line 1") },
-                                        onClick = { onMarkTwoPoint() },
-                                    )
-                                    DropdownMenuItem(
-                                        text = { Text("Cancel precise sync") },
-                                        onClick = { onCancelTwoPoint() },
-                                    )
-                                }
-                                TwoPointPhase.WAITING_SECOND -> {
-                                    DropdownMenuItem(
-                                        text = { Text("Play to a later line, then Mark line 2") },
-                                        onClick = { onMarkTwoPoint() },
-                                    )
-                                    DropdownMenuItem(
-                                        text = { Text("Cancel precise sync") },
-                                        onClick = { onCancelTwoPoint() },
-                                    )
-                                }
-                            }
                         }
                     }
                 }
