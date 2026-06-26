@@ -138,7 +138,7 @@ fun SettingsScreen(onBack: () -> Unit) {
             SettingSliderRow(
                 title = "Grid columns",
                 valueLabel = "$gridColumns",
-                value = gridColumns.toFloat(), valueRange = 2f..6f, steps = 3,
+                value = gridColumns.toFloat(), valueRange = 2f..4f, steps = 1,
                 onValueChange = { vm.setGridColumns(it.roundToInt()) },
             )
 

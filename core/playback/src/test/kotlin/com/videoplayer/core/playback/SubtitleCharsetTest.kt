@@ -89,4 +89,18 @@ class SubtitleCharsetTest {
         assertThat(decoded).isEqualTo("ğ")
         assertThat(decoded).doesNotContain(replacementChar.toString())
     }
+
+    @Test fun `undefined windows-1254 byte never produces a replacement char`() {
+        // 0x81 is undefined in windows-1254 (decoding it would emit U+FFFD) but maps losslessly
+        // under ISO-8859-9. It is also invalid as UTF-8, so the terminal Turkish branch must catch
+        // it and fall through to ISO-8859-9 rather than emit U+FFFD. Build a one-cue SRT with a raw
+        // 0x81 byte spliced into the cue body.
+        val prefix = "1\n00:00:01,000 --> 00:00:04,000\n".toByteArray(StandardCharsets.US_ASCII)
+        val bytes = prefix + byteArrayOf(0x81.toByte()) + "\n".toByteArray(StandardCharsets.US_ASCII)
+        val decoded = decodeSubtitleBytes(bytes)
+        assertThat(decoded).doesNotContain(replacementChar.toString())
+        val cues = parseSubtitleBytes(bytes)
+        assertThat(cues).hasSize(1)
+        assertThat(cues[0].text).doesNotContain(replacementChar.toString())
+    }
 }

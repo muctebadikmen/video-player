@@ -24,9 +24,15 @@ class HoldSpeedAndSubtitleMathTest {
         assertThat(formatSpeedLabel(3f)).isEqualTo("3×")
     }
 
-    @Test fun `format fractional speed keeps one decimal`() {
+    @Test fun `format fractional speed strips trailing zeros`() {
         assertThat(formatSpeedLabel(2.5f)).isEqualTo("2.5×")
-        assertThat(formatSpeedLabel(2.55f)).isEqualTo("2.6×")
+        assertThat(formatSpeedLabel(2.55f)).isEqualTo("2.55×")
+    }
+
+    @Test fun `format quarter presets keep two decimals`() {
+        assertThat(formatSpeedLabel(0.25f)).isEqualTo("0.25×")
+        assertThat(formatSpeedLabel(0.75f)).isEqualTo("0.75×")
+        assertThat(formatSpeedLabel(1.25f)).isEqualTo("1.25×")
     }
 
     @Test fun `clampHoldSpeed bounds to 1 to 4`() {

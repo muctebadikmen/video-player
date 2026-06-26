@@ -20,8 +20,9 @@ object SubtitleLoader {
     suspend fun load(context: Context, uri: String): List<SubtitleCue> =
         withContext(Dispatchers.IO) {
             try {
-                if (uri.substringBefore('?').endsWith(".ass", ignoreCase = true) ||
-                    uri.substringBefore('?').endsWith(".ssa", ignoreCase = true)
+                val path = uri.substringBefore('?')
+                if (path.endsWith(".ass", ignoreCase = true) ||
+                    path.endsWith(".ssa", ignoreCase = true)
                 ) {
                     Log.w(TAG, "Unsupported subtitle format (ASS/SSA), cues will be empty: $uri")
                 }

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 package com.videoplayer.app.player.gestures
 
-import kotlin.math.roundToInt
+import java.util.Locale
 
 /** Volume can be boosted to 200% of system max (1.0 = system max). */
 const val MAX_VOLUME_FACTOR = 2f
@@ -57,10 +57,14 @@ fun boostSpeedForPointers(pressedCount: Int, oneFinger: Float, twoFinger: Float)
 /** True when a brightness/volume/seek drag must be ignored because hold-to-speed owns the pointers. */
 fun shouldIgnoreDrag(speedBoostActive: Boolean): Boolean = speedBoostActive
 
-/** Compact label for the speed badge: "2×", "2.5×" (one decimal, trailing .0 dropped). */
+/**
+ * Compact label for the speed badge: "2×", "1.5×", "0.25×" (up to two decimals, trailing
+ * zeros and a dangling dot stripped so integers and quarter presets both render cleanly).
+ */
 fun formatSpeedLabel(speed: Float): String {
-    val rounded = (speed * 10f).roundToInt() / 10f
-    val text = if (rounded % 1f == 0f) rounded.toInt().toString() else rounded.toString()
+    // Locale.ROOT pins the '.' decimal separator (a locale like tr_TR would otherwise emit a comma,
+    // which the trim below cannot strip) so integers and quarter presets both render cleanly.
+    val text = "%.2f".format(Locale.ROOT, speed).trimEnd('0').trimEnd('.')
     return "$text×"
 }
 

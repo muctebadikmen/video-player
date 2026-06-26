@@ -306,6 +306,9 @@ fun PlayerScreen(
     var showSearchSheet by remember { mutableStateOf(false) }
     // Re-key on the file so switching videos closes a stale sync sheet.
     var showSyncSheet by remember(currentItem.uri) { mutableStateOf(false) }
+    // Player options sheet, hoisted to the root Box (like the sync sheet) so the 3s control
+    // auto-hide can't tear it down mid-interaction. Re-keyed on the file for the same reason.
+    var showOptionsSheet by remember(currentItem.uri) { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
@@ -871,6 +874,7 @@ fun PlayerScreen(
                     selectedSubtitleUri = null // embedded selection clears the custom overlay
                     engine.selectEmbeddedTextTrack(id)
                 },
+                onOpenOptions = { showOptionsSheet = true },
             )
         }
 
@@ -950,6 +954,59 @@ fun PlayerScreen(
                     }
                 },
                 onDismiss = { showSyncSheet = false },
+            )
+        }
+
+        if (showOptionsSheet && !inPip) {
+            PlayerOptionsSheet(
+                abLoop = abLoop,
+                sleepActive = sleepActive,
+                orientationLabel = orientationMode.shortLabel(),
+                onFrameStep = { delta ->
+                    val s = engine.state.value
+                    engine.pause()
+                    engine.seekTo(seekTarget(s.positionMs, delta, s.durationMs))
+                    interactionTick++
+                },
+                onToggleAb = {
+                    abLoop = when {
+                        abLoop.startMs == null -> abLoop.copy(startMs = engine.state.value.positionMs)
+                        abLoop.endMs == null -> abLoop.copy(endMs = engine.state.value.positionMs)
+                        else -> AbLoop()
+                    }
+                    interactionTick++
+                },
+                onPickSleep = { option ->
+                    when (option) {
+                        SleepOption.OFF -> {
+                            sleepDeadlineMs = null
+                            sleepAtEndOfVideo = false
+                        }
+                        SleepOption.END_OF_VIDEO -> {
+                            sleepAtEndOfVideo = true
+                            sleepDeadlineMs = null
+                        }
+                        else -> {
+                            sleepAtEndOfVideo = false
+                            sleepDeadlineMs = System.currentTimeMillis() + option.minutes!! * 60_000L
+                        }
+                    }
+                    interactionTick++
+                },
+                onCycleOrientation = {
+                    orientationMode = nextOrientationMode(orientationMode)
+                    val ai = orientationMode.toActivityInfo()
+                    activity?.requestedOrientation = ai
+                    playerViewModel.persistOrientation(currentItem.uri, ai)
+                    interactionTick++
+                },
+                onSetThumbnail = {
+                    com.videoplayer.app.thumbnail.ThumbnailRepository.getInstance(context)
+                        .setCustomThumbnailFromFrame(currentItem.uri, state.positionMs)
+                    android.widget.Toast.makeText(context, "Thumbnail set", android.widget.Toast.LENGTH_SHORT).show()
+                    showOptionsSheet = false
+                },
+                onDismiss = { showOptionsSheet = false },
             )
         }
 

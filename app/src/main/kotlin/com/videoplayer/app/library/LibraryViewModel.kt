@@ -25,7 +25,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -77,11 +78,15 @@ class LibraryViewModel(
     private val loading = MutableStateFlow(true)
 
     init {
-        viewModelScope.launch {
-            val savedColumns = settings.gridColumns.first()
-            val savedSize = GridSize.entries.firstOrNull { it.columns == savedColumns } ?: GridSize.MEDIUM
-            controls.value = controls.value.copy(gridSize = savedSize)
-        }
+        // The persisted grid-columns preference is the single source of truth for grid size: this
+        // collector seeds the initial value and keeps the library in sync with live changes from
+        // Settings (and with cycleGridSize, which writes the same DataStore key).
+        settings.gridColumns
+            .onEach { columns ->
+                val size = GridSize.entries.firstOrNull { it.columns == columns } ?: GridSize.MEDIUM
+                controls.value = controls.value.copy(gridSize = size)
+            }
+            .launchIn(viewModelScope)
     }
 
     private data class Sources(
@@ -144,7 +149,8 @@ class LibraryViewModel(
             GridSize.MEDIUM -> GridSize.LARGE
             GridSize.LARGE -> GridSize.SMALL
         }
-        controls.value = controls.value.copy(gridSize = next)
+        // Write only the persisted preference; the init collector is the single source of truth and
+        // reflects the change back into controls.gridSize (so this stays consistent with Settings).
         viewModelScope.launch { settings.setGridColumns(next.columns) }
     }
 }

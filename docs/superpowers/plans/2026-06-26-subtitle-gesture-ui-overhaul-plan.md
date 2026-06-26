@@ -11,12 +11,14 @@ player-file refactors build on earlier ones.
 
 | # | Workstream | Key files | Test surface | Status |
 |---|---|---|---|---|
-| 1 | Turkish subtitle **encoding** | `core/playback/SubtitleCharset.kt` (new), `app/subtitle/SubtitleLoader.kt` | `SubtitleCharsetTest` (JVM) | ☐ |
-| 2 | Fast **unlock** (3s→0.7s) | `core/playback/ScreenControls.kt` | `ScreenControlsTest` | ☐ |
-| 3 | **Typography** + search polish | `theme/Type.kt`, `library/LibraryScreen.kt` | build + emulator | ☐ |
-| 4 | **Gesture lockout** (hold-to-speed) | `player/PlayerScreen.kt`, `player/gestures/GestureMath.kt` | `GestureMathTest` + emulator | ☐ |
-| 5 | **Subtitle sync sheet** | `player/SubtitleSyncSheet.kt` (new), `PlayerControls.kt`, `PlayerScreen.kt` | build + emulator | ☐ |
-| 6 | **Settings reorg + Player options sheet** | `settings/SettingsViewModel.kt`, `settings/SettingsScreen.kt`, `PlayerControls.kt`, `PlayerScreen.kt` | build + emulator | ☐ |
+| 1 | Turkish subtitle **encoding** | `core/playback/SubtitleCharset.kt` (new), `app/subtitle/SubtitleLoader.kt` | `SubtitleCharsetTest` (JVM) | ✅ `f5778f6` — 8 tests; on-device render "Çocuğun ışığı söndü; şık güneş, öğün." correct |
+| 2 | Fast **unlock** (3s→0.7s) | `core/playback/ScreenControls.kt` | `ScreenControlsTest` | ✅ `b98313f` |
+| 3 | **Typography** + search polish | `theme/Type.kt`, `library/LibraryScreen.kt` | build + emulator | ✅ `2c92744` — verified library/settings/player |
+| 4 | **Gesture lockout** (hold-to-speed) | `player/PlayerScreen.kt`, `player/gestures/GestureMath.kt` | `GestureMathTest` + emulator | ✅ `eb35d87` — predicate tested + guards |
+| 5 | **Subtitle sync sheet** | `player/SubtitleSyncSheet.kt` (new), `PlayerControls.kt`, `PlayerScreen.kt` | build + emulator | ✅ `25a8a24` — sheet readout +0→+550ms verified |
+| 6 | **Settings reorg + Player options sheet** | `settings/SettingsViewModel.kt`, `settings/SettingsScreen.kt`, `PlayerControls.kt`, `PlayerScreen.kt` | build + emulator | ✅ `d3cf8b4` — all sections + options sheet verified |
+
+**Status: all six implemented, green, and verified on `kuran_test` emulator. Adversarial review + release pending.**
 
 ## Reconciliations / decisions baked in
 - **Subtitle sync** = its own dedicated `SubtitleSyncSheet` (WS5's options sheet excludes sync).
