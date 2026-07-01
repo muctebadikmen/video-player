@@ -38,6 +38,9 @@ data class LoginInfo(
 
 data class DownloadInfo(val bytes: ByteArray, val remaining: Int)
 
+/** OSDb movie-hash on the wire: exactly 16 lowercase hex chars. Anything else is a hard 400 at the API. */
+private val MOVIEHASH_REGEX = Regex("^[a-f0-9]{16}$")
+
 class OpenSubtitlesClient(
     private val versionName: String,
     private val httpClient: OkHttpClient = OkHttpClient(),
@@ -86,10 +89,17 @@ class OpenSubtitlesClient(
         query: String?,
         languages: List<String>,
     ): OsResult<List<SubtitleSearchResult>> = execute {
+        // OpenSubtitles requires query params lowercased and added in alphabetical KEY order, with the
+        // languages CSV itself sorted — otherwise the API answers 301 redirects (documented, and done
+        // by the reference VLSub client). Emit them alphabetically: languages, moviehash, query.
         val url = "$baseUrl/subtitles".toHttpUrl().newBuilder().apply {
-            if (!moviehash.isNullOrBlank()) addQueryParameter("moviehash", moviehash)
-            if (!query.isNullOrBlank()) addQueryParameter("query", query)
-            if (languages.isNotEmpty()) addEncodedQueryParameter("languages", languages.joinToString(","))
+            val langCsv = languages.map { it.trim().lowercase() }.filter { it.isNotEmpty() }.sorted().joinToString(",")
+            // Encoded so the separators stay literal commas (en,tr), not %2C — the value is already safe.
+            if (langCsv.isNotEmpty()) addEncodedQueryParameter("languages", langCsv)
+            val normHash = moviehash?.trim()?.lowercase()
+            // A malformed hash returns a hard 400 that aborts the whole search; drop it instead.
+            if (!normHash.isNullOrEmpty() && normHash.matches(MOVIEHASH_REGEX)) addQueryParameter("moviehash", normHash)
+            if (!query.isNullOrBlank()) addQueryParameter("query", query.lowercase())
         }.build()
         val req = Request.Builder().url(url).commonHeaders(apiKey, token).get().build()
         httpClient.newCall(req).execute().use { resp ->
@@ -107,7 +117,7 @@ class OpenSubtitlesClient(
             .post(body)
             .build()
         httpClient.newCall(req).execute().use { resp ->
-            val meta = toResult(resp) { json.decodeFromString(DownloadResponse.serializer(), it) }
+            val meta = toResult(resp, quotaOn406 = true) { json.decodeFromString(DownloadResponse.serializer(), it) }
             if (meta is OsResult.Failure) return@execute meta
             val link = (meta as OsResult.Success).value
             val fileReq = Request.Builder()
@@ -152,7 +162,7 @@ class OpenSubtitlesClient(
 
     @Volatile private var lastRetryAfterMs: Long? = null
 
-    private inline fun <T> toResult(resp: Response, parse: (String) -> T): OsResult<T> {
+    private inline fun <T> toResult(resp: Response, quotaOn406: Boolean = false, parse: (String) -> T): OsResult<T> {
         lastRetryAfterMs = resp.header("Retry-After")?.toLongOrNull()?.let { it * 1000 }
         return when {
             resp.isSuccessful -> {
@@ -160,14 +170,20 @@ class OpenSubtitlesClient(
                 try { OsResult.Success(parse(text)) }
                 catch (e: Exception) { OsResult.Failure(OsError.Unexpected(e.message ?: "parse error")) }
             }
-            resp.code == 406 -> OsResult.Failure(OsError.QuotaExhausted)
+            // 406 means "quota exhausted" ONLY on /download. On /subtitles it is an edge-case bad query,
+            // so surface it as a normal Http error rather than a misleading "quota reached" message.
+            resp.code == 406 && quotaOn406 -> OsResult.Failure(OsError.QuotaExhausted)
             else -> OsResult.Failure(OsError.Http(resp.code, extractMessage(resp)))
         }
     }
 
+    /** The true cause of a 4xx lives in the X-Reason header (then X-Os-Rule), not the JSON body. */
     private fun extractMessage(resp: Response): String =
-        runCatching {
-            val raw = resp.peekBody(2048).string()
-            Regex("\"message\"\\s*:\\s*\"([^\"]*)\"").find(raw)?.groupValues?.get(1) ?: resp.message
-        }.getOrDefault(resp.message)
+        resp.header("X-Reason")
+            ?: resp.header("X-Os-Rule")
+            ?: runCatching {
+                val raw = resp.peekBody(2048).string()
+                Regex("\"message\"\\s*:\\s*\"([^\"]*)\"").find(raw)?.groupValues?.get(1)
+            }.getOrNull()
+            ?: resp.message
 }
