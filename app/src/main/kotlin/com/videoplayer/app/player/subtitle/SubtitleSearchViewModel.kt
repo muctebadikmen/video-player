@@ -29,6 +29,20 @@ sealed interface SearchUiState {
     data class Error(val message: String) : SearchUiState
 }
 
+/**
+ * Map a client error to a user-facing state. For HTTP errors it surfaces the server's real reason
+ * (the X-Reason header the client now reads) instead of a meaningless "Server error (code)", falling
+ * back to the code only when no message is available. Pure + testable.
+ */
+internal fun mapSearchError(e: OsError): SearchUiState = when (e) {
+    is OsError.QuotaExhausted -> SearchUiState.QuotaExhausted
+    is OsError.Offline -> SearchUiState.Offline
+    is OsError.NotLoggedIn -> SearchUiState.NotLoggedIn
+    is OsError.Http -> if (e.code == 401) SearchUiState.Error("Session expired — log in again in Settings")
+        else SearchUiState.Error(e.message.ifBlank { "Server error (${e.code})" })
+    is OsError.Unexpected -> SearchUiState.Error(e.message)
+}
+
 class SubtitleSearchViewModel(
     private val osRepo: OpenSubtitlesCredentialsRepository,
     private val versionName: String,
@@ -53,7 +67,7 @@ class SubtitleSearchViewModel(
                     _uiState.value = if (ranked.isEmpty()) SearchUiState.Empty
                         else SearchUiState.Results(ranked, creds.remaining)
                 }
-                is OsResult.Failure -> _uiState.value = mapError(r.error)
+                is OsResult.Failure -> _uiState.value = mapSearchError(r.error)
             }
         }
     }
@@ -79,18 +93,9 @@ class SubtitleSearchViewModel(
                     }
                     onSaved(uri)
                 }
-                is OsResult.Failure -> { _uiState.value = mapError(r.error); onSaved(null) }
+                is OsResult.Failure -> { _uiState.value = mapSearchError(r.error); onSaved(null) }
             }
         }
-    }
-
-    private fun mapError(e: OsError): SearchUiState = when (e) {
-        is OsError.QuotaExhausted -> SearchUiState.QuotaExhausted
-        is OsError.Offline -> SearchUiState.Offline
-        is OsError.NotLoggedIn -> SearchUiState.NotLoggedIn
-        is OsError.Http -> if (e.code == 401) SearchUiState.Error("Session expired — log in again in Settings")
-            else SearchUiState.Error("Server error (${e.code})")
-        is OsError.Unexpected -> SearchUiState.Error(e.message)
     }
 
     companion object {

@@ -16,3 +16,7 @@ build/
 # Release signing (never commit)
 keystore.properties
 *.jks
+
+# Local secrets / test credentials (never commit)
+.env
+.env.local

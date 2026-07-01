@@ -55,7 +55,7 @@ class OpenSubtitlesClientTest {
                    "release":"BluRay","files":[{"file_id":555,"file_name":"movie.en.srt"}]}}]}""",
             ),
         )
-        val result = client.search("KEY", "tok123", moviehash = "abc", query = "movie", languages = listOf("en", "tr"))
+        val result = client.search("KEY", "tok123", moviehash = "abcdef0123456789", query = "movie", languages = listOf("en", "tr"))
         assertThat(result).isInstanceOf(OsResult.Success::class.java)
         val list = (result as OsResult.Success).value
         assertThat(list).hasSize(1)
@@ -64,9 +64,50 @@ class OpenSubtitlesClientTest {
 
         val req = server.takeRequest()
         assertThat(req.method).isEqualTo("GET")
-        assertThat(req.path).contains("moviehash=abc")
+        assertThat(req.path).contains("moviehash=abcdef0123456789")
         assertThat(req.path).contains("languages=en,tr")
         assertThat(req.getHeader("Authorization")).isEqualTo("Bearer tok123")
+    }
+
+    // --- Regression tests for the "login works but search fails" bug (v1.9.x) ---
+    // The API answers 301 redirects when the request is not normalized (lowercased values, params in
+    // alphabetical KEY order, languages CSV sorted). The app used to send tr,en + a raw mixed-case
+    // filename + non-alphabetical param order, which surfaced to the user as a generic "Server error".
+
+    @Test fun `search normalizes params - lowercased, alphabetical key order, sorted languages`() = runTest {
+        server.enqueue(MockResponse().setResponseCode(200).setBody("""{"total_count":0,"data":[]}"""))
+        client.search(
+            "KEY", "tok",
+            moviehash = "ABCDEF0123456789",           // upper-case: must be lowercased on the wire
+            query = "The.Movie.2021.x264-GRP",         // upper-case: must be lowercased on the wire
+            languages = listOf("tr", "en"),            // the real default order: must be sorted to en,tr
+        )
+        val path = server.takeRequest().path!!
+        assertThat(path).isEqualTo(
+            "/api/v1/subtitles?languages=en,tr&moviehash=abcdef0123456789&query=the.movie.2021.x264-grp",
+        )
+    }
+
+    @Test fun `search drops a malformed moviehash instead of sending a 400-bound value`() = runTest {
+        server.enqueue(MockResponse().setResponseCode(200).setBody("""{"total_count":0,"data":[]}"""))
+        client.search("KEY", "tok", moviehash = "xyz", query = "movie", languages = listOf("en"))
+        assertThat(server.takeRequest().path!!).doesNotContain("moviehash")
+    }
+
+    @Test fun `4xx surfaces the X-Reason header as the error message`() = runTest {
+        server.enqueue(
+            MockResponse().setResponseCode(400)
+                .setHeader("X-Reason", "query >= 3 characters").setBody("{}"),
+        )
+        val result = client.search("KEY", "tok", moviehash = null, query = "ab", languages = listOf("en"))
+        assertThat(result).isEqualTo(OsResult.Failure(OsError.Http(400, "query >= 3 characters")))
+    }
+
+    @Test fun `search 406 is surfaced as Http not QuotaExhausted (quota-406 is download-only)`() = runTest {
+        server.enqueue(MockResponse().setResponseCode(406).setBody("{}"))
+        val result = client.search("KEY", "tok", moviehash = null, query = "movie", languages = listOf("en"))
+        assertThat(result).isInstanceOf(OsResult.Failure::class.java)
+        assertThat((result as OsResult.Failure).error).isInstanceOf(OsError.Http::class.java)
     }
 
     @Test fun `download returns link bytes and remaining quota`() = runTest {
